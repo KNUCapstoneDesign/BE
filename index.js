@@ -3,8 +3,16 @@ const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
 const mysql = require('mysql2');
+const bcrypt = require('bcrypt');
 
 const {connection, closeConnection} = require("./db");
+
+const db = mysql.createConnection({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME
+});
 
 const app = express();
 
@@ -12,6 +20,33 @@ const app = express();
 app.use(cors());
 app.use(morgan("dev"));
 app.use(express.json());
+
+app.post('/api/signup', async (req, res) => {
+    const { username, email, password } = req.body;
+
+    // 비밀번호 유효성 검사 (최소 8자 이상)
+    if (password.length < 8) {
+        return res.status(400).json({ message: '비밀번호는 최소 8자 이상이어야 합니다.' });
+    }
+
+    try {
+        // 비밀번호 해싱
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // 사용자 정보 DB에 삽입
+        const query = 'INSERT INTO user (username, email, password) VALUES (?, ?, ?)';
+        db.query(query, [username, email, hashedPassword], (err, result) => {
+            if (err) {
+                console.error('DB 저장 실패:', err);
+                return res.status(500).json({ message: '회원가입에 실패했습니다.' });
+            }
+            return res.status(200).json({ message: '회원가입 성공!' });
+        });
+    } catch (err) {
+        console.error('서버 오류:', err);
+        res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+    }
+});
 
 // 기본 라우트
 app.get("/", (req, res) => {
