@@ -1,69 +1,92 @@
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
-import { pool } from '../config/db'; // mysql2로 만든 커넥션 풀
 import axios from 'axios';
-import jwksClient, { SigningKey } from 'jwks-rsa'; // Google public keys를 확인할 수 있는 라이브러리
+import { pool } from '../config/db';
+import qs from 'qs'; // 👈 설치 필요: npm install qs
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
-const client = jwksClient({
-  jwksUri: 'https://www.googleapis.com/oauth2/v3/certs',
-});
+export const googleTokenLogin = async (req: Request, res: Response): Promise<void> => {
+  const { code } = req.body;
 
-// 공개 키를 가져오는 함수
-const getGoogleKey = (kid: string) => {
-  return new Promise<string>((resolve, reject) => {
-    client.getSigningKey(kid, (err, key) => {
-      if (err || !key) {
-        return reject(err || new Error('Signing key not found'))
-      }
-      const signingKey = key as SigningKey; // 명시적 타입 단언
-      resolve(key.getPublicKey());
-    });
-  });
-};
-
-export const googleLogin = async (req: Request, res: Response) => {
-  const { token } = req.body; // 클라이언트에서 전달받은 구글 토큰
+  if (!code) {
+    res.status(400).json({ message: '코드가 없습니다.' });
+    return;
+  }
 
   try {
-    // 구글 토큰 검증을 위해 구글의 공개 키를 사용하여 토큰을 검증
-    const response = await axios.get(`https://oauth2.googleapis.com/tokeninfo?id_token=${token}`);
-    const { email, name, picture } = response.data;
+    // 1. code로 access_token 요청
+    const tokenRes = await axios.post(
+      'https://oauth2.googleapis.com/token',
+      qs.stringify({
+        code,
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: process.env.GOOGLE_REDIRECT_URI,
+        grant_type: 'authorization_code',
+      }),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
 
-    // 이메일로 기존 사용자 확인
-    const [rows] = await pool.query('SELECT * FROM user WHERE email = ?', [email]);
-    let user = (rows as any)[0];
+    const { access_token } = tokenRes.data;
+
+    // 2. 유저 정보 요청
+    const userInfoRes = await axios.get('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: `Bearer ${access_token}` },
+    });
+
+    const { email, name, id: googleId } = userInfoRes.data;
+
+    // 3. DB 사용자 확인 또는 생성
+    let user;
+    const [rowsByGoogleId] = await pool.query('SELECT * FROM user WHERE googleId = ?', [googleId]);
+    user = (rowsByGoogleId as any)[0];
 
     if (!user) {
-      // 기존 사용자가 없다면 새 사용자로 등록
-      await pool.query('INSERT INTO user (name, email, password, phone, picture) VALUES (?, ?, ?, ?, ?)', [name, email, '', '', picture]);
-      user = { name, email, picture };
+      // 구글 ID 기준으로는 없지만 이메일로 이미 가입된 사용자일 수도 있음
+      const [rowsByEmail] = await pool.query('SELECT * FROM user WHERE email = ?', [email]);
+      const existingUser = (rowsByEmail as any)[0];
+
+      if (existingUser) {
+        // 이미 이메일로 가입된 사용자라면 googleId만 업데이트
+        await pool.query('UPDATE user SET googleId = ? WHERE email = ?', [googleId, email]);
+        user = existingUser; // 기존 유저로 사용
+      } else {
+        // 완전히 새로운 사용자 → INSERT
+        await pool.query('INSERT INTO user (name, email, googleId) VALUES (?, ?, ?)', [name, email, googleId]);
+        user = { name, email, googleId, phone: '' };
+      }
     }
 
-    // JWT 토큰 생성
-    const newToken = jwt.sign({ email: user.email }, JWT_SECRET, { expiresIn: '1d' });
+    // 4. JWT 발급 및 응답
+    const token = jwt.sign({ email, googleId }, JWT_SECRET, { expiresIn: '1d' });
 
-    // 로그인 성공 후 사용자 정보와 토큰을 반환
     res.json({
-      token: newToken,
-      name: user.name,
-      email: user.email,
-      picture: user.picture,
+      token,
+      name,
+      email,
+      phone: user?.phone || ''
     });
   } catch (err) {
-    console.error('구글 로그인 처리 에러:', err);
-    res.status(500).json({ message: '서버 에러' });
+    console.error('Google 로그인 처리 오류:', err);
+    res.status(500).json({ message: 'Google 로그인 중 서버 오류 발생' });
   }
 };
 
-export const signup = async (req: Request, res: Response) => {
+import bcrypt from 'bcryptjs';
+
+// 회원가입
+export const signup = async (req: Request, res: Response): Promise<void> => {
   const { name, email, password, phone } = req.body;
 
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
-    await pool.query('INSERT INTO user (name, email, password, phone) VALUES (?, ?, ?, ?)', [name, email, hashedPassword, phone]);
+    await pool.query('INSERT INTO user (name, email, password, phone) VALUES (?, ?, ?, ?)', [
+      name,
+      email,
+      hashedPassword,
+      phone,
+    ]);
 
     res.status(201).json({ message: '회원가입이 완료되었습니다.' });
   } catch (err) {
@@ -72,28 +95,28 @@ export const signup = async (req: Request, res: Response) => {
   }
 };
 
+// 로그인
 export const login = async (req: Request, res: Response): Promise<void> => {
-  const {email, password } = req.body;
+  const { email, password } = req.body;
 
   try {
     const [rows] = await pool.query('SELECT * FROM user WHERE email = ?', [email]);
     const user = (rows as any)[0];
 
     if (!user) {
-       res.status(401).json({ message: '존재하지 않는 사용자입니다.' });
+      res.status(401).json({ message: '존재하지 않는 사용자입니다.' });
+      return;
     }
 
-    console.log('입력한 비밀번호:', password);
-    console.log('DB 비밀번호 해시:', user.password);
     const isMatch = await bcrypt.compare(password, user.password);
-    console.log('비밀번호 일치 여부:', isMatch);
     if (!isMatch) {
       res.status(401).json({ message: '비밀번호가 틀렸습니다.' });
+      return;
     }
 
     const token = jwt.sign({ email: user.email }, JWT_SECRET, { expiresIn: '1d' });
 
-     res.json({
+    res.json({
       token,
       name: user.name,
       email: user.email,
@@ -101,6 +124,6 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     });
   } catch (err) {
     console.error('로그인 에러:', err);
-     res.status(500).json({ message: '서버 에러' });
+    res.status(500).json({ message: '서버 에러' });
   }
 };
