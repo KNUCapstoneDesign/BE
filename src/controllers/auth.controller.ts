@@ -65,6 +65,7 @@ export const googleTokenLogin = async (req: Request, res: Response): Promise<voi
       token,
       name,
       email,
+      isExistingMember : !!user,
       phone: user?.phone || ''
     });
   } catch (err) {

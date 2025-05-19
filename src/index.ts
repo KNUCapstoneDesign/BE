@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { closeConnection } from './config/db';
 import authRoutes from './routes/auth.routes';
+import menuRouter from './routes/menu'
 
 dotenv.config();
 
@@ -16,6 +17,8 @@ app.use(express.json());
 
 // 라우터 연결
 app.use('/api/auth', authRoutes);
+
+app.use('/api/menu', menuRouter)
 
 // 기본 라우트
 app.get('/', (req, res) => {
