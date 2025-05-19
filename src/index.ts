@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import { closeConnection } from './config/db';
 import authRoutes from './routes/auth.routes';
 import menuRouter from './routes/menu'
+import scheduleRouter from './controllers/schedule.controller'
 
 dotenv.config();
 
@@ -20,6 +21,7 @@ app.use('/api/auth', authRoutes);
 
 app.use('/api/menu', menuRouter)
 
+app.use('/api/schedules', scheduleRouter)
 // 기본 라우트
 app.get('/', (req, res) => {
   res.send('🎉 여행지 코스 추천 API 서버가 실행 중입니다!');
