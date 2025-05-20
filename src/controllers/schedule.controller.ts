@@ -6,7 +6,12 @@ const router = express.Router()
 
 router.post('/', async (req, res) => {
   try {
-    const data: NewSchedule = req.body
+    const { user_id, title, start_date, end_date } = req.body
+    if (!user_id || !title || !start_date || !end_date) {
+      console.log('Received body:', req.body)
+      return res.status(400).json({ error: 'Missing required fields' })
+    }
+    const data: NewSchedule = { user_id, title, start_date, end_date }
     const result = await createSchedule(data)
     res.status(201).json(result)
   } catch (err) {

@@ -53,8 +53,13 @@ export const googleTokenLogin = async (req: Request, res: Response): Promise<voi
         user = existingUser; // 기존 유저로 사용
       } else {
         // 완전히 새로운 사용자 → INSERT
-        await pool.query('INSERT INTO user (name, email, googleId) VALUES (?, ?, ?)', [name, email, googleId]);
-        user = { name, email, googleId, phone: '' };
+        const [result] = await pool.query(
+          'INSERT INTO user (name, email, googleId) VALUES (?, ?, ?)',
+          [name, email, googleId]
+        )
+        const insertId = (result as any).insertId
+        const [newUserRows] = await pool.query('SELECT * FROM user WHERE user_id = ?', [insertId])
+        user = (newUserRows as any)[0] // ✅ 여기서 user_id 포함된 진짜 유저 정보 가져옴
       }
     }
 
@@ -62,6 +67,7 @@ export const googleTokenLogin = async (req: Request, res: Response): Promise<voi
     const token = jwt.sign({ email, googleId }, JWT_SECRET, { expiresIn: '1d' });
 
     res.json({
+      user_id: user.user_id,
       token,
       name,
       email,
@@ -122,6 +128,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       name: user.name,
       email: user.email,
       phone: user.phone,
+      user_id: user.user_id,
+
     });
   } catch (err) {
     console.error('로그인 에러:', err);
