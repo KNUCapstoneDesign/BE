@@ -8,7 +8,7 @@ import authRoutes from './routes/auth.routes';
 import menuRouter from './routes/menu'
 import scheduleRouter from './controllers/schedule.controller'
 import schedulespotRoutes from './routes/schedulespot.routes'
-
+import fullscheduleRoutes from './routes/fullschedule.routes'
 dotenv.config();
 
 const app = express();
@@ -25,6 +25,8 @@ app.use('/api/menu', menuRouter)
 app.use('/api/schedules', scheduleRouter)
 
 app.use('/api/schedulespots', schedulespotRoutes)
+
+app.use('/api/full-schedule', fullscheduleRoutes)
 // 기본 라우트
 app.get('/', (req, res) => {
   res.send('🎉 여행지 코스 추천 API 서버가 실행 중입니다!');
