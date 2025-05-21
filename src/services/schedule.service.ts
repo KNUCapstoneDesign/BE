@@ -19,5 +19,9 @@ export const createSchedule = async (schedule: Omit<Schedule, 'schedule_id' | 'c
 // 특정 사용자 일정 목록 가져오기
 export const getSchedulesByUserId = async (user_id: number): Promise<Schedule[]> => {
   const [rows] = await pool.query('SELECT * FROM UserSchedule WHERE user_id = ?', [user_id])
-  return rows as Schedule[]
+  return (rows as Schedule[]).map((schedule) => ({
+    ...schedule,
+    start_date: new Date(schedule.start_date).toISOString().split('T')[0],
+    end_date: new Date(schedule.end_date).toISOString().split('T')[0],
+  }))
 }
