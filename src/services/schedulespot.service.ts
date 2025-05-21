@@ -5,10 +5,11 @@ interface AddSpotParams {
   schedule_id: number
   day: number
   place_id: string
+  contenttypeid: number
   sequence: number
 }
 
-export const addSpotToSchedule = async ({ schedule_id, day, place_id, sequence }: AddSpotParams) => {
+export const addSpotToSchedule = async ({ schedule_id, day, place_id,contenttypeid, sequence }: AddSpotParams) => {
   // 1. course_id 찾거나 생성
   const [existing] = await pool.query(
     'SELECT * FROM ScheduleCourse WHERE schedule_id = ? AND day = ?',
@@ -28,8 +29,8 @@ export const addSpotToSchedule = async ({ schedule_id, day, place_id, sequence }
 
   // 2. 장소 추가
   await pool.query(
-    'INSERT INTO ScheduleCourseSpot (course_id, place_id, sequence) VALUES (?, ?, ?)',
-    [course_id, place_id, sequence]
+    'INSERT INTO ScheduleCourseSpot (course_id ,place_id, contenttypeid, sequence) VALUES (?, ?, ?, ?)',
+    [course_id, place_id, contenttypeid, sequence]
   )
 
   return { message: '장소가 추가되었습니다.', course_id }

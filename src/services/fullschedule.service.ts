@@ -20,6 +20,7 @@ export const getFullScheduleByUserId = async (userId: number) => {
             day: course.day,
             spots: (spots as any[]).map((s: any) => ({
               place_id: s.place_id,
+              contenttypeid: s.contenttypeid,
               sequence: s.sequence,
             })),
           }
