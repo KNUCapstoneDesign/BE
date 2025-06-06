@@ -26,8 +26,8 @@ export const getSchedulesByUserId = async (user_id: number): Promise<Schedule[]>
   }))
 }
 
-// 일정 삭제
+// 일정 삭제 (CASCADE로 하위 테이블 자동 삭제)
 export const deleteScheduleById = async (schedule_id: number) => {
-  await pool.query('DELETE FROM UserSchedule WHERE schedule_id = ?', [schedule_id])
+  const [result] = await pool.query('DELETE FROM UserSchedule WHERE schedule_id = ?', [schedule_id]);
+  return (result as any).affectedRows || 0;
 }
-
