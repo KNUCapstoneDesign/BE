@@ -25,3 +25,9 @@ export const getSchedulesByUserId = async (user_id: number): Promise<Schedule[]>
     end_date: new Date(schedule.end_date).toISOString().split('T')[0],
   }))
 }
+
+// 일정 삭제
+export const deleteScheduleById = async (schedule_id: number) => {
+  await pool.query('DELETE FROM UserSchedule WHERE schedule_id = ?', [schedule_id])
+}
+

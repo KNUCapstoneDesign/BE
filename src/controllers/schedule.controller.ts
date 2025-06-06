@@ -1,5 +1,5 @@
 import express from 'express'
-import { createSchedule, getSchedulesByUserId } from '../services/schedule.service'
+import { createSchedule, getSchedulesByUserId, deleteScheduleById } from '../services/schedule.service'
 import { NewSchedule } from '../models/schedule.model'
 
 const router = express.Router()
@@ -33,4 +33,17 @@ router.get('/', async (req, res) => {
   }
 })
 
+router.delete('/:id', async (req, res) => {
+  const scheduleId = parseInt(req.params.id)
+  if (!scheduleId) return res.status(400).json({ error: 'Missing schedule_id' })
+  try {
+    await deleteScheduleById(scheduleId)
+    res.status(204).send()
+  } catch (err) {
+    console.error('DELETE /schedules/:id error:', err)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
 export default router
+
