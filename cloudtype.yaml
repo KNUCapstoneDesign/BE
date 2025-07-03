@@ -6,9 +6,9 @@ app:
     commands:
       - npm install
       - npx tsc
-      - npx puppeteer browsers install chrome
       - npm uninstall puppeteer-core
       - npm install puppeteer
+      - npx puppeteer browsers install chrome
   run:
     command: node dist/index.js
     env:
