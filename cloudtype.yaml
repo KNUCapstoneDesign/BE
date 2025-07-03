@@ -1,14 +1,8 @@
 name: capstonedesign-be
 app:
-  type: node
+  type: docker
   build:
-    # TypeScript 빌드
-    commands:
-      - npm install
-      - npm uninstall puppeteer-core
-      - npm install puppeteer
-      - npx tsc
-      - npx puppeteer browsers install chrome
+    Dockerfile: Dockerfile
   run:
     command: node dist/index.js
     env:
