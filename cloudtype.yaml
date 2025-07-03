@@ -7,7 +7,7 @@ app:
       - npm install
       - npx tsc
   run:
-    command: node dist/server.js
+    command: node dist/index.js
     env:
       - name: PORT
         value: 5001
