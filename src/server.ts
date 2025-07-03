@@ -14,12 +14,20 @@ dotenv.config();
 
 const app = express();
 
+const allowedOrigins = [
+  'https://capstonedesign-iota.vercel.app',
+  'https://port-0-planit-mcmt59q6ef387a77.sel5.cloudtype.app',
+];
+
 app.use(cors({
-  origin: [
-    'https://capstonedesign-iota.vercel.app', // Vercel 프론트 주소
-    'https://port-0-planit-mcmt59q6ef387a77.sel5.cloudtype.app', // 클라우드타입 배포 주소
-  ],
-  credentials: true, // withCredentials 요청 허용 시 필요
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
 }));
 
 app.use(morgan('dev'));

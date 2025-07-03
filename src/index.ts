@@ -14,18 +14,21 @@ dotenv.config();
 
 const app = express();
 
-// app.options('*', cors({
-//   origin: 'https://capstonedesign-iota.vercel.app',
-//   credentials: true
-// }));
+const allowedOrigins = [
+  'https://capstonedesign-iota.vercel.app',
+  'https://port-0-planit-mcmt59q6ef387a77.sel5.cloudtype.app',
+  'http://localhost:3000',
+];
 
 app.use(cors({
-  origin: [
-    'https://capstonedesign-iota.vercel.app',
-    'https://port-0-planit-mcmt59q6ef387a77.sel5.cloudtype.app',
-    'http://localhost:3000'
-  ],
-  credentials: true, // withCredentials 요청 허용 시 필요
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
 }));
 
 app.use(morgan('dev'));
