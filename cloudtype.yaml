@@ -1,0 +1,23 @@
+name: capstonedesign-be
+app:
+  type: node
+  build:
+    # TypeScript 빌드
+    commands:
+      - npm install
+      - npx tsc
+  run:
+    command: node dist/server.js
+    env:
+      - name: PORT
+        value: 5001
+      - name: DB_HOST
+        value: 15.164.50.58
+      - name: DB_USER
+        value: ricky
+      - name: DB_NAME
+        value: capstonedesign
+      - name: GOOGLE_CLIENT_ID
+        value: 579917967294-hfrrld9i9agiisaqgp4oo5s0h3jj1u77.apps.googleusercontent.com
+      - name: GOOGLE_REDIRECT_URI
+        value: http://localhost:3000, https://capstonedesign-iota.vercel.app/
