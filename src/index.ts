@@ -48,8 +48,8 @@ app.get('/', (req, res) => {
 });
 
 // 서버 시작
-const PORT = process.env.PORT || 5001;
-app.listen(PORT, () => {
+const PORT = Number(process.env.PORT) || 5001;
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 서버가 http://localhost:${PORT} 에서 실행 중`);
 });
 
