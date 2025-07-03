@@ -9,7 +9,6 @@ app.use(cors({
   origin: [
     'http://localhost:3000',
     'https://port-0-planit-fe-mcmt59q6ef387a77.sel5.cloudtype.app',
-    'https://planit-fe-mcmt59q6ef387a77.sel5.cloudtype.app',
     'https://capstonedesign-iota.vercel.app',
   ],
   credentials: true,
