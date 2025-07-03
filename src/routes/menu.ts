@@ -12,7 +12,11 @@ router.get('/', async (req, res): Promise<any> => {
   }
 
   try {
-    const browser = await puppeteer.launch({ headless: true })
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
+    })
     const page = await browser.newPage()
 
     // User-Agent 설정 (봇 차단 대비)
