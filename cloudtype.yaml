@@ -2,7 +2,7 @@ name: capstonedesign-be
 app:
   type: docker
   build:
-    Dockerfile: Dockerfile
+    dockerfile: Dockerfile
   run:
     command: node dist/index.js
     env:
