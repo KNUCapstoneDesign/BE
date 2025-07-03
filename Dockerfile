@@ -1,5 +1,5 @@
 # Node.js 18 기반의 슬림 이미지 사용
-FROM node:18-slim
+FROM node:22
 
 # puppeteer 및 크롬 실행에 필요한 패키지 설치
 RUN apt-get update && apt-get install -y \
