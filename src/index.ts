@@ -20,7 +20,10 @@ const app = express();
 // }));
 
 app.use(cors({
-  origin: 'https://capstonedesign-iota.vercel.app', // Vercel 프론트 주소
+  origin: [
+    'https://capstonedesign-iota.vercel.app',
+    'http://localhost:3000'
+  ],
   credentials: true, // withCredentials 요청 허용 시 필요
 }));
 
