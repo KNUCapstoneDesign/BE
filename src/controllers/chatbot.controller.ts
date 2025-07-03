@@ -2,11 +2,11 @@ import { Request, Response } from 'express';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 
-export const postChatbot = async (req: Request, res: Response) => {
+export const postChatbot = async (req: Request, res: Response): Promise<void> => {
   try {
     const { messages } = req.body;
     if (!messages || !Array.isArray(messages)) {
-      return res.status(400).json({ error: 'messages 배열이 필요합니다.' });
+      res.status(400).json({ error: 'messages 배열이 필요합니다.' });
     }
 
     const response = await axios.post(
@@ -30,10 +30,10 @@ export const postChatbot = async (req: Request, res: Response) => {
         },
       }
     );
-    return res.json(response.data);
+    res.json(response.data);
   } catch (error: any) {
     console.error(error?.response?.data || error.message);
-    return res.status(500).json({ error: 'Clova Studio API 호출 실패', detail: error?.response?.data || error.message });
+    res.status(500).json({ error: 'Clova Studio API 호출 실패', detail: error?.response?.data || error.message });
   }
 };
 

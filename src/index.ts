@@ -6,10 +6,10 @@ import dotenv from 'dotenv';
 import { closeConnection } from './config/db';
 import authRoutes from './routes/auth.routes';
 import menuRouter from './routes/menu'
-import scheduleRouter from './controllers/schedule.controller'
+import scheduleRouter from './routes/schedule.route'
 import schedulespotRoutes from './routes/schedulespot.routes'
-import fullscheduleRoutes from './routes/fullschedule.routes'
-import chatbotRouter from './routes/chatbot.routes';
+import fullscheduleRouter from './routes/fullschedule.route'
+import chatbotRouter from './routes/chatbot.route';
 dotenv.config();
 
 const app = express();
@@ -27,7 +27,7 @@ app.use('/api/schedules', scheduleRouter)
 
 app.use('/api/schedulespots', schedulespotRoutes)
 
-app.use('/api/full-schedule', fullscheduleRoutes)
+app.use('/api/full-schedule', fullscheduleRouter)
 
 app.use('/api/chatbot', chatbotRouter)
 // 기본 라우트

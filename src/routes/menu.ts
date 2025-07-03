@@ -5,7 +5,7 @@ import puppeteer from 'puppeteer'
 
 const router = express.Router()
 
-router.get('/', async (req, res) => {
+router.get('/', async (req, res):Promise<any> => {
   const { name } = req.query
 
   if (!name || typeof name !== 'string') {
@@ -32,7 +32,7 @@ router.get('/', async (req, res) => {
 
       const normalize = (s: string) => s.replace(/\s/g, '').toLowerCase()
       const target = titles.find(el =>
-        normalize(el.textContent || '').includes(normalize(targetName))
+        normalize(el.textContent || '').includes(normalize(targetName)),
       )
 
       return target?.id.replace('title', '') || null
