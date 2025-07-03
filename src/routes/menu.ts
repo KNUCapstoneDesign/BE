@@ -1,11 +1,10 @@
 import express from 'express'
-import fetch from 'node-fetch'
 import * as cheerio from 'cheerio'
 import puppeteer from 'puppeteer'
 
 const router = express.Router()
 
-router.get('/', async (req, res):Promise<any> => {
+router.get('/', async (req, res): Promise<any> => {
   const { name } = req.query
 
   if (!name || typeof name !== 'string') {
@@ -44,6 +43,8 @@ router.get('/', async (req, res):Promise<any> => {
       return res.status(404).json({ error: 'No matching restaurant title found' })
     }
 
+    // fetch를 동적으로 import
+    const fetch = (await import('node-fetch')).default;
     // 상세 페이지 메뉴 크롤링
     const detailUrl = `https://www.diningcode.com/profile.php?rid=${rid}`
     const detailResponse = await fetch(detailUrl, {
