@@ -5,9 +5,9 @@ app:
     # TypeScript 빌드
     commands:
       - npm install
-      - npx tsc
       - npm uninstall puppeteer-core
       - npm install puppeteer
+      - npx tsc
       - npx puppeteer browsers install chrome
   run:
     command: node dist/index.js
