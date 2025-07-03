@@ -14,12 +14,20 @@ dotenv.config();
 
 const app = express();
 
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://port-0-planit-fe-mcmt59q6ef387a77.sel5.cloudtype.app',
+  'https://capstonedesign-iota.vercel.app',
+];
+
 app.use(cors({
-  origin: [
-    'http://localhost:3000',
-    'https://port-0-planit-fe-mcmt59q6ef387a77.sel5.cloudtype.app',
-    'https://capstonedesign-iota.vercel.app',
-  ],
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'), false);
+  },
   credentials: true,
 }));
 app.use(morgan('dev'));
