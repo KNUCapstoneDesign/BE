@@ -14,7 +14,11 @@ dotenv.config();
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: 'https://capstonedesign-iota.vercel.app', // Vercel 프론트 주소
+  credentials: true, // withCredentials 요청 허용 시 필요
+}));
+
 app.use(morgan('dev'));
 app.use(express.json());
 
