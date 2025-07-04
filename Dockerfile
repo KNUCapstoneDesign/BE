@@ -45,5 +45,5 @@ ENV PUPPETEER_EXECUTABLE_PATH="/app/node_modules/puppeteer/.local-chromium/linux
 EXPOSE 5001
 
 # 실행 명령
-CMD ["node", "dist/index.ts"]
+CMD ["node", "dist/index.js"]
 
