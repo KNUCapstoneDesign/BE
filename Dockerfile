@@ -37,13 +37,8 @@ RUN npm install
 COPY . .
 RUN npm run build
 
-# 환경변수: puppeteer가 설치한 크롬 경로 자동 인식
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
-ENV PUPPETEER_EXECUTABLE_PATH="/app/node_modules/puppeteer/.local-chromium/linux-*/chrome-linux/chrome"
-
 # 5001 포트 오픈
 EXPOSE 5001
 
 # 실행 명령
 CMD ["node", "dist/index.js"]
-
