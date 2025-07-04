@@ -4,7 +4,7 @@ app:
   build:
     dockerfile: Dockerfile
   run:
-    command: node dist/index.js
+    command: node dist/index.ts
     env:
       - name: PORT
         value: 5001
