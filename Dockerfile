@@ -32,9 +32,13 @@ COPY package*.json ./
 
 # puppeteer 설치 (full 버전)
 RUN npm install
+
+# node 유저로 전환 후 크롬 설치
+USER node
 RUN npx puppeteer browsers install chrome
 
-# 소스 복사 및 빌드
+# 다시 root로 전환해 소스 복사 및 빌드
+USER root
 COPY . .
 RUN npm run build
 
