@@ -32,6 +32,7 @@ COPY package*.json ./
 
 # puppeteer 설치 (full 버전)
 RUN npm install
+RUN npx puppeteer browsers install chrome
 
 # 소스 복사 및 빌드
 COPY . .
