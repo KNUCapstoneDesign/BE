@@ -15,6 +15,13 @@ export const googleTokenLogin = async (req: Request, res: Response): Promise<voi
   }
 
   try {
+    const redirectUris = (process.env.GOOGLE_REDIRECT_URI || '').split(',');
+    // 실제 요청의 origin과 일치하는 redirect_uri 사용
+    const reqOrigin = req.headers.origin;
+    let redirect_uri = redirectUris[0]; // 기본값
+    if (reqOrigin && redirectUris.includes(reqOrigin)) {
+      redirect_uri = reqOrigin;
+    }
     // 1. code로 access_token 요청
     const tokenRes = await axios.post(
       'https://oauth2.googleapis.com/token',
@@ -22,7 +29,7 @@ export const googleTokenLogin = async (req: Request, res: Response): Promise<voi
         code,
         client_id: process.env.GOOGLE_CLIENT_ID,
         client_secret: process.env.GOOGLE_CLIENT_SECRET,
-        redirect_uri: process.env.GOOGLE_REDIRECT_URI,
+        redirect_uri,
         grant_type: 'authorization_code',
       }),
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
