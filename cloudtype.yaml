@@ -17,4 +17,4 @@ app:
       - name: GOOGLE_CLIENT_ID
         value: 579917967294-hfrrld9i9agiisaqgp4oo5s0h3jj1u77.apps.googleusercontent.com
       - name: GOOGLE_REDIRECT_URI
-        value: https://capstonedesign-iota.vercel.app,https://planitkor.com
+        value: https://planitkor.com, https://capstonedesign-iota.vercel.app
