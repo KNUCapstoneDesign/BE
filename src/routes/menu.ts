@@ -69,33 +69,35 @@ router.get('/', async (req, res): Promise<any> => {
     await new Promise(res => setTimeout(res, 3000));
     t('React 렌더링 대기 완료');
 
-    // waitForSelector로 a[id^="block"]가 나올 때까지 대기
-    await page.waitForSelector('a[id^="block"]', { timeout: 7000 });
-    const html = await page.content();
-    if (!html.includes('id="block')) {
+    // waitForSelector로 h2[id^="title"]가 나올 때까지 대기
+    let html: string;
+    try {
+      await page.waitForSelector('h2[id^="title"]', { timeout: 12000 });
+      html = await page.content();
+    } catch (e) {
+      html = await page.content();
       const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
       const body = bodyMatch ? bodyMatch[0] : html;
-      console.error('❌ a[id^="block"] selector를 찾지 못했습니다. 현재 BODY:', body.slice(0, 3000));
+      console.error('❌ h2[id^="title"] selector를 찾지 못했습니다. 현재 BODY:', body.slice(0, 3000));
       await browser.close();
-      return res.status(404).json({ error: 'a[id^="block"] selector를 찾지 못했습니다.' });
+      return res.status(404).json({ error: '검색 결과가 없거나 사이트 구조가 변경되었습니다.' });
     }
-    t('a[id^="block"] selector HTML에서 확인 완료');
+    t('h2[id^="title"] selector HTML에서 확인 완료');
 
-    // rid 추출 (a[id^="block"]에서 rid와 식당명 추출)
+    // rid 추출 (h2[id^="title"]에서 장소코드 추출)
     const rid = await page.evaluate((targetName) => {
-      const blocks = Array.from(document.querySelectorAll('a[id^="block"]'));
+      const titles = Array.from(document.querySelectorAll('h2[id^="title"]'));
       const normalize = (s: string) => s.replace(/\s/g, '').toLowerCase();
       let bestRid = null;
       let bestScore = -1;
-      for (const block of blocks) {
-        const h2 = block.querySelector('h2[id^="title"]');
-        const text = h2 ? h2.textContent : '';
-        if (!text) continue;
-        // 유사도: 포함 여부 + 길이 차이로 단순 계산
+      for (const h2 of titles) {
+        const text = h2.textContent || '';
         const score = normalize(text).includes(normalize(targetName)) ? 100 - Math.abs(normalize(text).length - normalize(targetName).length) : 0;
         if (score > bestScore) {
           bestScore = score;
-          bestRid = block.id.replace('block', '');
+          // h2의 id에서 숫자만 추출 (예: title123456)
+          const match = h2.id.match(/title(\d+)/);
+          if (match) bestRid = match[1];
         }
       }
       return bestRid;
