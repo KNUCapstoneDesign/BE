@@ -25,7 +25,7 @@ router.get('/', async (req, res): Promise<any> => {
     // a[id^="block"]에서 rid와 식당명 추출
     let bestRid: string | null = null
     let bestScore = -1
-    const normalize = (s: string) => s.replace(/\s/g, '').toLowerCase()
+    const normalize = (s: string) => s.replace(/[^\w가-힣]/g, '').toLowerCase();
     $('a[id^="block"]').each((_, el) => {
       const block = $(el)
       const h2 = block.find('h2[id^="title"]')
@@ -37,6 +37,11 @@ router.get('/', async (req, res): Promise<any> => {
         bestRid = block.attr('id')?.replace('block', '') || null
       }
     })
+    // 검색 결과가 1개 이상이면 무조건 첫 번째 결과라도 반환
+    if (!bestRid) {
+      const firstBlock = $('a[id^="block"]').first()
+      bestRid = firstBlock.attr('id')?.replace('block', '') || null
+    }
     if (!bestRid) {
       return res.status(404).json({ error: 'No matching restaurant title found' })
     }
