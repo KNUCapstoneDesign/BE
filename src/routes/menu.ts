@@ -1,6 +1,6 @@
 import express from 'express'
 import * as cheerio from 'cheerio'
-import axios from 'axios'
+import puppeteer from 'puppeteer'
 
 const router = express.Router()
 
@@ -11,57 +11,92 @@ router.get('/', async (req, res): Promise<any> => {
     return res.status(400).json({ error: 'Missing or invalid name parameter' })
   }
 
+  let browser: puppeteer.Browser | null = null;
   try {
-    // diningcode 검색 결과 페이지 요청
+    browser = await puppeteer.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-blink-features=AutomationControlled',
+      ],
+    })
+    const page = await browser.newPage()
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
+    await page.setExtraHTTPHeaders({
+      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+    })
+    await page.setViewport({ width: 1280, height: 800 })
+
     const searchUrl = `https://www.diningcode.com/list.php?query=${encodeURIComponent(name)}`
-    const { data: html } = await axios.get(searchUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-      },
-      timeout: 15000,
-    })
-    const $ = cheerio.load(html)
-    // a[id^="block"]에서 rid와 식당명 추출
-    let bestRid: string | null = null
-    const normalize = (s: string) => s.replace(/[^\w가-힣]/g, '').toLowerCase();
-    const normalizedName = normalize(name)
-    // 검색 결과 중 식당명에 name이 포함된 첫 번째 결과 반환
-    $('a[id^="block"]').each((_, el) => {
-      const block = $(el)
-      const h2 = block.find('h2[id^="title"]')
-      const text = h2.text()
-      if (!text) return
-      if (normalize(text).includes(normalizedName) && !bestRid) {
-        bestRid = block.attr('id')?.replace('block', '') || null
+    let loaded = false;
+    let lastError = null;
+    for (let i = 0; i < 2; i++) {
+      try {
+        await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 60000 })
+        loaded = true;
+        break;
+      } catch (err) {
+        lastError = err;
       }
-    })
-    // 포함된 결과가 없으면 첫 번째 결과라도 반환
-    if (!bestRid) {
-      const firstBlock = $('a[id^="block"]').first()
-      bestRid = firstBlock.attr('id')?.replace('block', '') || null
     }
-    if (!bestRid) {
+    if (!loaded) {
+      throw lastError;
+    }
+
+    await new Promise(res => setTimeout(res, 2000));
+
+    try {
+      await page.waitForSelector('a[id^="block"]', { timeout: 10000 })
+    } catch (waitErr) {
+      const html = await page.content();
+      const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
+      const body = bodyMatch ? bodyMatch[0] : html;
+      console.error('❌ waitForSelector 실패, 현재 BODY:', body.slice(0, 3000));
+      throw waitErr;
+    }
+
+    const rid = await page.evaluate((targetName) => {
+      const blocks = Array.from(document.querySelectorAll('a[id^="block"]'));
+      const normalize = (s: string) => s.replace(/\s/g, '').toLowerCase();
+      let bestRid = null;
+      let bestScore = -1;
+      for (const block of blocks) {
+        const h2 = block.querySelector('h2[id^="title"]');
+        const text = h2 ? h2.textContent : '';
+        if (!text) continue;
+        const score = normalize(text).includes(normalize(targetName)) ? 100 - Math.abs(normalize(text).length - normalize(targetName).length) : 0;
+        if (score > bestScore) {
+          bestScore = score;
+          bestRid = block.id.replace('block', '');
+        }
+      }
+      return bestRid;
+    }, name)
+
+    if (!rid) {
       return res.status(404).json({ error: 'No matching restaurant title found' })
     }
-    // 상세 페이지 메뉴 크롤링
-    const detailUrl = `https://www.diningcode.com/profile.php?rid=${bestRid}`
-    const { data: detailHtml } = await axios.get(detailUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0',
-      },
-      timeout: 15000,
+
+    const fetch = (await import('node-fetch')).default;
+    const detailUrl = `https://www.diningcode.com/profile.php?rid=${rid}`
+    const detailResponse = await fetch(detailUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
     })
-    const $$ = cheerio.load(detailHtml)
-    const menus = $$('.list.Restaurant_MenuList > li').map((_, el) => ({
-      name: $$(el).find('.Restaurant_Menu').text().trim(),
-      price: $$(el).find('.Restaurant_MenuPrice').text().trim(),
+    const detailHtml = await detailResponse.text()
+    const $ = cheerio.load(detailHtml)
+
+    const menus = $('.list.Restaurant_MenuList > li').map((_, el) => ({
+      name: $(el).find('.Restaurant_Menu').text().trim(),
+      price: $(el).find('.Restaurant_MenuPrice').text().trim(),
     })).get()
 
     return res.json({ menus })
   } catch (err) {
     console.error('❌ 크롤링 실패:', err)
     return res.status(500).json({ error: 'Server error' })
+  } finally {
+    if (browser) await browser.close();
   }
 })
 
