@@ -65,67 +65,39 @@ router.get('/', async (req, res): Promise<any> => {
       throw lastError;
     }
 
-    // React 렌더링 대기 (5초로 증가)
-    await new Promise(res => setTimeout(res, 5000));
-    t('React 렌더링 대기 완료');
+    // 불필요한 리소스 차단
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+      const type = req.resourceType();
+      if (["image", "stylesheet", "font", "media"].includes(type)) req.abort();
+      else req.continue();
+    });
 
-    // a[id^="block"] 또는 h2[id^="title"]가 나올 때까지 대기 (둘 중 하나만 있어도 통과)
-    let html: string;
-    try {
-      await page.waitForFunction(() =>
-          document.querySelector('a[id^="block"]') || document.querySelector('h2[id^="title"]'),
-        { timeout: 15000 }
-      );
-      html = await page.content();
-    } catch (e) {
-      html = await page.content();
-      const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
-      const body = bodyMatch ? bodyMatch[0] : html;
-      console.error('❌ a[id^="block"] 또는 h2[id^="title"] selector를 찾지 못했습니다. 현재 BODY:', body.slice(0, 3000));
-      await browser.close();
-      return res.status(404).json({ error: '검색 결과가 없거나 사이트 구조가 변경되었습니다.' });
+    // 페이지 진입 후 2.5초만 대기 (React 렌더링)
+    await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 20000 });
+    await new Promise(res => setTimeout(res, 2500));
+
+    // HTML 파싱 (cheerio로 block/title id 추출)
+    const html = await page.content();
+    const $ = cheerio.load(html);
+    let rid: string | null = null;
+    const block = $('a[id^="block"]').first();
+    if (block.length) {
+      const match = block.attr('id')?.match(/^block(.+)/);
+      if (match) rid = match[1];
     }
-    t('a[id^="block"] 또는 h2[id^="title"] selector HTML에서 확인 완료');
+    if (!rid) {
+      const h2 = $('h2[id^="title"]').first();
+      const match = h2.attr('id')?.match(/^title(.+)/);
+      if (match) rid = match[1];
+    }
 
-    // block 또는 title 중 하나만 존재해도 추출 (undefined, null, string 모두 안전하게 처리)
-    const rid = await page.evaluate((targetName) => {
-      const normalize = (s: string | null | undefined) => (typeof s === 'string' ? s : '').replace(/\s/g, '').toLowerCase();
-      let bestRid = null;
-      let bestScore = -1;
-      // 1. a[id^="block"] 우선 탐색
-      const blocks = Array.from(document.querySelectorAll('a[id^="block"]'));
-      for (const block of blocks) {
-        const h2 = block.querySelector('h2[id^="title"]');
-        const text = h2 ? h2.textContent : '';
-        const normTarget = normalize(targetName);
-        const score = normalize(text).includes(normTarget) ? 100 - Math.abs(normalize(text).length - normTarget.length) : 0;
-        if (score > bestScore) {
-          bestScore = score;
-          const match = block.id.match(/^block(.+)/);
-          if (match) bestRid = match[1];
-        }
-      }
-      // 2. 없으면 h2[id^="title"] 단독 탐색
-      if (!bestRid) {
-        const titles = Array.from(document.querySelectorAll('h2[id^="title"]'));
-        for (const h2 of titles) {
-          const text = h2.textContent || '';
-          const normTarget = normalize(targetName);
-          const score = normalize(text).includes(normTarget) ? 100 - Math.abs(normalize(text).length - normTarget.length) : 0;
-          if (score > bestScore) {
-            bestScore = score;
-            const match = h2.id.match(/^title(.+)/);
-            if (match) bestRid = match[1];
-          }
-        }
-      }
-      return bestRid;
-    }, name ?? '');
-
-    await browser.close()
+    await browser.close();
 
     if (!rid) {
-      return res.status(404).json({ error: 'No matching restaurant title found' })
+      // 디버깅용: 실패 시 HTML 저장
+      try { require('fs').writeFileSync('debug_diningcode.html', html); } catch(e) {}
+      return res.status(404).json({ error: 'No matching restaurant title found' });
     }
 
     // fetch를 동적으로 import
@@ -136,11 +108,11 @@ router.get('/', async (req, res): Promise<any> => {
       headers: { 'User-Agent': 'Mozilla/5.0' },
     })
     const detailHtml = await detailResponse.text()
-    const $ = cheerio.load(detailHtml)
+    const $$ = cheerio.load(detailHtml)
 
-    const menus = $('.list.Restaurant_MenuList > li').map((_, el) => ({
-      name: $(el).find('.Restaurant_Menu').text().trim(),
-      price: $(el).find('.Restaurant_MenuPrice').text().trim(),
+    const menus = $$('.list.Restaurant_MenuList > li').map((_, el) => ({
+      name: $$(el).find('.Restaurant_Menu').text().trim(),
+      price: $$(el).find('.Restaurant_MenuPrice').text().trim(),
     })).get()
 
     return res.json({ menus })
