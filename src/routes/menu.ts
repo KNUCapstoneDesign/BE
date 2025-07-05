@@ -35,32 +35,22 @@ router.get('/', async (req, res): Promise<any> => {
     };
     t('시작');
 
-    // 불필요한 리소스(이미지, 폰트 등) 차단
-    await page.setRequestInterception(true);
-    page.on('request', (req) => {
-      const resourceType = req.resourceType();
-      if (["image", "stylesheet", "font", "media"].includes(resourceType)) {
-        req.abort();
-      } else {
-        req.continue();
-      }
-    });
-
-    // 검색 페이지 접속 및 로딩 대기 (waitUntil: 'networkidle2'로 최적화)
+    // 검색 페이지 접속 및 로딩 대기 (waitUntil: 'domcontentloaded'로 변경, 더 빠른 진행)
     const searchUrl = `https://www.diningcode.com/list.php?query=${encodeURIComponent(name)}`
     let loaded = false;
     let lastError = null;
     for (let i = 0; i < 2; i++) { // 최대 2회 재시도
       try {
-        await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 20000 })
+        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
         t('page.goto 완료');
         loaded = true;
         break;
       } catch (err) {
         lastError = err;
+        // detached frame 에러 발생 시 page 새로고침 후 재시도
         if (err instanceof Error && err.message && err.message.includes('detached')) {
           try {
-            await page.reload({ waitUntil: 'networkidle2', timeout: 10000 });
+            await page.reload({ waitUntil: 'domcontentloaded', timeout: 20000 });
             t('page.reload 완료');
             loaded = true;
             break;
@@ -75,10 +65,17 @@ router.get('/', async (req, res): Promise<any> => {
       throw lastError;
     }
 
-    // waitForSelector로 a[id^="block"] 또는 h2[id^="title"]가 나올 때까지 대기 (최대 10초)
+    // React 렌더링 대기 (5초로 증가)
+    await new Promise(res => setTimeout(res, 5000));
+    t('React 렌더링 대기 완료');
+
+    // a[id^="block"] 또는 h2[id^="title"]가 나올 때까지 대기 (둘 중 하나만 있어도 통과)
     let html: string;
     try {
-      await page.waitForSelector('a[id^="block"], h2[id^="title"]', { timeout: 10000 });
+      await page.waitForFunction(() =>
+          document.querySelector('a[id^="block"]') || document.querySelector('h2[id^="title"]'),
+        { timeout: 15000 }
+      );
       html = await page.content();
     } catch (e) {
       html = await page.content();
@@ -90,20 +87,40 @@ router.get('/', async (req, res): Promise<any> => {
     }
     t('a[id^="block"] 또는 h2[id^="title"] selector HTML에서 확인 완료');
 
-    // block 또는 title 중 하나만 존재해도 추출 (가장 첫번째로 뜨는 식당의 rid만 추출)
-    const rid = await page.evaluate(() => {
-      const block = document.querySelector('a[id^="block"]');
-      if (block && block.id) {
-        const match = block.id.match(/^block(.+)/);
-        if (match) return match[1];
+    // block 또는 title 중 하나만 존재해도 추출 (undefined, null, string 모두 안전하게 처리)
+    const rid = await page.evaluate((targetName) => {
+      const normalize = (s: string | null | undefined) => (typeof s === 'string' ? s : '').replace(/\s/g, '').toLowerCase();
+      let bestRid = null;
+      let bestScore = -1;
+      // 1. a[id^="block"] 우선 탐색
+      const blocks = Array.from(document.querySelectorAll('a[id^="block"]'));
+      for (const block of blocks) {
+        const h2 = block.querySelector('h2[id^="title"]');
+        const text = h2 ? h2.textContent : '';
+        const normTarget = normalize(targetName);
+        const score = normalize(text).includes(normTarget) ? 100 - Math.abs(normalize(text).length - normTarget.length) : 0;
+        if (score > bestScore) {
+          bestScore = score;
+          const match = block.id.match(/^block(.+)/);
+          if (match) bestRid = match[1];
+        }
       }
-      const h2 = document.querySelector('h2[id^="title"]');
-      if (h2 && h2.id) {
-        const match = h2.id.match(/^title(.+)/);
-        if (match) return match[1];
+      // 2. 없으면 h2[id^="title"] 단독 탐색
+      if (!bestRid) {
+        const titles = Array.from(document.querySelectorAll('h2[id^="title"]'));
+        for (const h2 of titles) {
+          const text = h2.textContent || '';
+          const normTarget = normalize(targetName);
+          const score = normalize(text).includes(normTarget) ? 100 - Math.abs(normalize(text).length - normTarget.length) : 0;
+          if (score > bestScore) {
+            bestScore = score;
+            const match = h2.id.match(/^title(.+)/);
+            if (match) bestRid = match[1];
+          }
+        }
       }
-      return null;
-    });
+      return bestRid;
+    }, name ?? '');
 
     await browser.close()
 
