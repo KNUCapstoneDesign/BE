@@ -60,7 +60,7 @@ router.get('/', async (req, res): Promise<any> => {
     // rid 추출 (a[id^="block"]에서 rid와 식당명 추출)
     const rid = await page.evaluate((targetName) => {
       const blocks = Array.from(document.querySelectorAll('a[id^="block"]'));
-      const normalize = (s) => s.replace(/\s/g, '').toLowerCase();
+      const normalize = (s: string) => s.replace(/\s/g, '').toLowerCase();
       let bestRid = null;
       let bestScore = -1;
       for (const block of blocks) {
