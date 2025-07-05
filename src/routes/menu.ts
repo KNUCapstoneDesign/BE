@@ -65,22 +65,57 @@ router.get('/', async (req, res): Promise<any> => {
       throw lastError;
     }
 
-    // waitForSelector 없이 바로 HTML에 selector가 있는지 검사하고 진행
-    await new Promise(res => setTimeout(res, 3000)); // React 렌더링 대기(3초)
-    const html = await page.content();
+    // React 렌더링 대기 (3초로 증가)
+    await new Promise(res => setTimeout(res, 3000));
+    t('React 렌더링 대기 완료');
+
+    // a[id^="block"] 로딩 대기 (최대 10초)
+    let selectorFound = false;
+    let html = '';
+    try {
+      await page.waitForSelector('a[id^="block"]', { timeout: 10000 })
+      t('waitForSelector 완료')
+      selectorFound = true;
+    } catch (waitErr) {
+      html = await page.content();
+      // selector가 실제 HTML에 있는지 검사
+      if (html.includes('id="block')) {
+        console.warn('waitForSelector는 실패했지만, HTML에 a[id^="block"]이 존재합니다. 강제 진행.');
+        selectorFound = true;
+      } else {
+        const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
+        const body = bodyMatch ? bodyMatch[0] : html;
+        console.error('❌ waitForSelector 실패, 현재 BODY:', body.slice(0, 3000));
+        await browser.close();
+        throw waitErr;
+      }
+    }
+    if (!selectorFound) {
+      await browser.close();
+      throw new Error('a[id^="block"] selector를 찾지 못했습니다.');
+    }
+
+    // block 중 목록의 가장 상단에 있는 block의 rid 추출
     let rid: string | null = null;
-    const $ = cheerio.load(html);
-    const block = $('a[id^="block"]').first();
-    if (block.length) {
-      const match = block.attr('id')?.match(/^block(.+)/);
-      if (match) rid = match[1];
+    if (html) {
+      const $ = cheerio.load(html);
+      const block = $('a[id^="block"]').first();
+      if (block.length) {
+        const match = block.attr('id')?.match(/^block(.+)/);
+        if (match) rid = match[1];
+      }
+    } else {
+      rid = await page.evaluate(() => {
+        const block = document.querySelector('a[id^="block"]');
+        if (block && block.id) {
+          return block.id.replace('block', '');
+        }
+        return null;
+      });
     }
-    if (!rid) {
-      const h2 = $('h2[id^="title"]').first();
-      const match = h2.attr('id')?.match(/^title(.+)/);
-      if (match) rid = match[1];
-    }
-    await browser.close();
+
+    await browser.close()
+
     if (!rid) {
       return res.status(404).json({ error: 'No matching restaurant title found' })
     }
@@ -93,10 +128,11 @@ router.get('/', async (req, res): Promise<any> => {
       headers: { 'User-Agent': 'Mozilla/5.0' },
     })
     const detailHtml = await detailResponse.text()
-    const $detail = cheerio.load(detailHtml)
-    const menus = $detail('.list.Restaurant_MenuList > li').map((_, el) => ({
-      name: $detail(el).find('.Restaurant_Menu').text().trim(),
-      price: $detail(el).find('.Restaurant_MenuPrice').text().trim(),
+    const $ = cheerio.load(detailHtml)
+
+    const menus = $('.list.Restaurant_MenuList > li').map((_, el) => ({
+      name: $(el).find('.Restaurant_Menu').text().trim(),
+      price: $(el).find('.Restaurant_MenuPrice').text().trim(),
     })).get()
 
     return res.json({ menus })
