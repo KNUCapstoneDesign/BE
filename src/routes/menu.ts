@@ -14,16 +14,36 @@ router.get('/', async (req, res): Promise<any> => {
   try {
     const browser = await puppeteer.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-blink-features=AutomationControlled',
+      ],
     })
     const page = await browser.newPage()
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
+    await page.setExtraHTTPHeaders({
+      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+    })
+    await page.setViewport({ width: 1280, height: 800 })
 
-    // User-Agent 설정 (봇 차단 대비)
-    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36')
-
-    // 검색 페이지 접속 및 로딩 대기
+    // 검색 페이지 접속 및 로딩 대기 (타임아웃 60초, domcontentloaded)
     const searchUrl = `https://www.diningcode.com/list.php?query=${encodeURIComponent(name)}`
-    await page.goto(searchUrl, { waitUntil: 'networkidle2' })
+    let loaded = false;
+    let lastError = null;
+    for (let i = 0; i < 2; i++) { // 최대 2회 재시도
+      try {
+        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 })
+        loaded = true;
+        break;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    if (!loaded) {
+      await browser.close();
+      throw lastError;
+    }
 
     // h2[id^="title"] 로딩 대기 (최대 10초)
     await page.waitForSelector('h2[id^="title"]', { timeout: 10000 })
