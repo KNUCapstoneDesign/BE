@@ -18,7 +18,10 @@ const allowedOrigins = [
   'https://capstonedesign-iota.vercel.app',
   'https://port-0-planit-mcmt59q6ef387a77.sel5.cloudtype.app',
   'http://localhost:3000',
-  'https://planitkor.com', // 추가
+  'https://planitkor.com',
+  'http://planitkor.com',
+  'https://www.planitkor.com',
+  'http://www.planitkor.com',
 ];
 
 app.use(cors({
