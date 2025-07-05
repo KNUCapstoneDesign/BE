@@ -33,7 +33,7 @@ router.get('/', async (req, res): Promise<any> => {
     let lastError = null;
     for (let i = 0; i < 2; i++) { // 최대 2회 재시도
       try {
-        await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 60000 })
+        await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 30000 })
         loaded = true;
         break;
       } catch (err) {
@@ -45,12 +45,12 @@ router.get('/', async (req, res): Promise<any> => {
       throw lastError;
     }
 
-    // React 렌더링 대기 (2초)
-    await new Promise(res => setTimeout(res, 2000));
+    // React 렌더링 대기 (1초)
+    await new Promise(res => setTimeout(res, 1000));
 
-    // a[id^="block"] 로딩 대기 (최대 10초)
+    // a[id^="block"] 로딩 대기 (최대 5초)
     try {
-      await page.waitForSelector('a[id^="block"]', { timeout: 10000 })
+      await page.waitForSelector('a[id^="block"]', { timeout: 5000 })
     } catch (waitErr) {
       const html = await page.content();
       const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
