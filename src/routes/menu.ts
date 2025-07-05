@@ -46,7 +46,14 @@ router.get('/', async (req, res): Promise<any> => {
     }
 
     // h2[id^="title"] 로딩 대기 (최대 10초)
-    await page.waitForSelector('h2[id^="title"]', { timeout: 10000 })
+    try {
+      await page.waitForSelector('h2[id^="title"]', { timeout: 10000 })
+    } catch (waitErr) {
+      const html = await page.content();
+      console.error('❌ waitForSelector 실패, 현재 HTML:', html.slice(0, 1000)); // 1000자만 출력
+      await browser.close();
+      throw waitErr;
+    }
 
     // rid 추출
     const rid = await page.evaluate((targetName) => {
