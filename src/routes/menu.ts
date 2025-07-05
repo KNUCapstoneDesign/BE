@@ -69,27 +69,31 @@ router.get('/', async (req, res): Promise<any> => {
     await new Promise(res => setTimeout(res, 5000));
     t('React 렌더링 대기 완료');
 
-    // a[id^="block"]가 나올 때까지 대기 후, 내부에서 h2[id^="title"]로 rid 추출
+    // a[id^="block"] 또는 h2[id^="title"]가 나올 때까지 대기 (둘 중 하나만 있어도 통과)
     let html: string;
     try {
-      await page.waitForSelector('a[id^="block"]', { timeout: 15000 });
+      await page.waitForFunction(() =>
+        document.querySelector('a[id^="block"]') || document.querySelector('h2[id^="title"]'),
+        { timeout: 15000 }
+      );
       html = await page.content();
     } catch (e) {
       html = await page.content();
       const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
       const body = bodyMatch ? bodyMatch[0] : html;
-      console.error('❌ a[id^="block"] selector를 찾지 못했습니다. 현재 BODY:', body.slice(0, 3000));
+      console.error('❌ a[id^="block"] 또는 h2[id^="title"] selector를 찾지 못했습니다. 현재 BODY:', body.slice(0, 3000));
       await browser.close();
       return res.status(404).json({ error: '검색 결과가 없거나 사이트 구조가 변경되었습니다.' });
     }
-    t('a[id^="block"] selector HTML에서 확인 완료');
+    t('a[id^="block"] 또는 h2[id^="title"] selector HTML에서 확인 완료');
 
-    // rid 추출 (a[id^="block"] 내부의 h2[id^="title"]에서 장소코드 추출)
+    // block 또는 title 중 하나만 존재해도 추출 (undefined, null, string 모두 안전하게 처리)
     const rid = await page.evaluate((targetName) => {
-      const blocks = Array.from(document.querySelectorAll('a[id^="block"]'));
-      const normalize = (s: string | null) => (s ?? '').replace(/\s/g, '').toLowerCase();
+      const normalize = (s: string | null | undefined) => (typeof s === 'string' ? s : '').replace(/\s/g, '').toLowerCase();
       let bestRid = null;
       let bestScore = -1;
+      // 1. a[id^="block"] 우선 탐색
+      const blocks = Array.from(document.querySelectorAll('a[id^="block"]'));
       for (const block of blocks) {
         const h2 = block.querySelector('h2[id^="title"]');
         const text = h2 ? h2.textContent : '';
@@ -97,13 +101,26 @@ router.get('/', async (req, res): Promise<any> => {
         const score = normalize(text).includes(normTarget) ? 100 - Math.abs(normalize(text).length - normTarget.length) : 0;
         if (score > bestScore) {
           bestScore = score;
-          // a 태그의 id에서 rid 추출 (예: blockLMy6BQjFbE2W)
           const match = block.id.match(/^block(.+)/);
           if (match) bestRid = match[1];
         }
       }
+      // 2. 없으면 h2[id^="title"] 단독 탐색
+      if (!bestRid) {
+        const titles = Array.from(document.querySelectorAll('h2[id^="title"]'));
+        for (const h2 of titles) {
+          const text = h2.textContent || '';
+          const normTarget = normalize(targetName);
+          const score = normalize(text).includes(normTarget) ? 100 - Math.abs(normalize(text).length - normTarget.length) : 0;
+          if (score > bestScore) {
+            bestScore = score;
+            const match = h2.id.match(/^title(.+)/);
+            if (match) bestRid = match[1];
+          }
+        }
+      }
       return bestRid;
-    }, name)
+    }, name ?? '');
 
     await browser.close()
 
