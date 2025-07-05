@@ -69,7 +69,8 @@ router.get('/', async (req, res): Promise<any> => {
     await new Promise(res => setTimeout(res, 3000));
     t('React 렌더링 대기 완료');
 
-    // waitForSelector 없이 바로 HTML에서 a[id^="block"] 존재 여부 확인 후 진행
+    // waitForSelector로 a[id^="block"]가 나올 때까지 대기
+    await page.waitForSelector('a[id^="block"]', { timeout: 7000 });
     const html = await page.content();
     if (!html.includes('id="block')) {
       const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
