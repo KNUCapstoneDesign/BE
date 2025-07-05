@@ -65,45 +65,54 @@ router.get('/', async (req, res): Promise<any> => {
       throw lastError;
     }
 
-    // 페이지가 완전히 렌더링될 때까지 충분히 대기 (networkidle0 + 추가 대기)
-    await page.goto(searchUrl, { waitUntil: 'networkidle0', timeout: 40000 });
-    await new Promise(res => setTimeout(res, 5000)); // React 렌더링 추가 대기
-    t('networkidle0 + 추가 대기 완료');
+    // React 렌더링 대기 (3초로 증가)
+    await new Promise(res => setTimeout(res, 3000));
+    t('React 렌더링 대기 완료');
 
-    // a[id^="block"] 또는 h2[id^="title"]가 나올 때까지 대기 (둘 중 하나만 있어도 통과, 30초까지 대기)
-    let html: string;
+    // a[id^="block"] 로딩 대기 (최대 10초)
+    let selectorFound = false;
     try {
-      await page.waitForFunction(() =>
-          document.querySelector('a[id^="block"]') || document.querySelector('h2[id^="title"]'),
-        { timeout: 30000 }
-      );
-      html = await page.content();
-    } catch (e) {
-      html = await page.content();
-      const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
-      const body = bodyMatch ? bodyMatch[0] : html;
-      console.error('❌ a[id^="block"] 또는 h2[id^="title"] selector를 찾지 못했습니다. 현재 BODY:', body.slice(0, 3000));
-      await browser.close();
-      return res.status(404).json({ error: '검색 결과가 없거나 사이트 구조가 변경되었습니다.' });
+      await page.waitForSelector('a[id^="block"]', { timeout: 10000 })
+      t('waitForSelector 완료')
+      selectorFound = true;
+    } catch (waitErr) {
+      const html = await page.content();
+      // selector가 실제 HTML에 있는지 검사
+      if (html.includes('id="block')) {
+        console.warn('waitForSelector는 실패했지만, HTML에 a[id^="block"]이 존재합니다. 강제 진행.');
+        selectorFound = true;
+      } else {
+        const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
+        const body = bodyMatch ? bodyMatch[0] : html;
+        console.error('❌ waitForSelector 실패, 현재 BODY:', body.slice(0, 3000));
+        await browser.close();
+        throw waitErr;
+      }
     }
-    t('a[id^="block"] 또는 h2[id^="title"] selector HTML에서 확인 완료');
+    if (!selectorFound) {
+      await browser.close();
+      throw new Error('a[id^="block"] selector를 찾지 못했습니다.');
+    }
 
-    // block 또는 title 중 하나만 존재해도 추출 (가장 첫번째로 뜨는 식당의 rid만 추출)
-    const rid = await page.evaluate(() => {
-      // 1. a[id^="block"]가 있으면 첫번째 id에서 rid 추출
-      const block = document.querySelector('a[id^="block"]');
-      if (block && block.id) {
-        const match = block.id.match(/^block(.+)/);
-        if (match) return match[1];
+    // rid 추출 (a[id^="block"]에서 rid와 식당명 추출)
+    const rid = await page.evaluate((targetName) => {
+      const blocks = Array.from(document.querySelectorAll('a[id^="block"]'));
+      const normalize = (s: string) => s.replace(/\s/g, '').toLowerCase();
+      let bestRid = null;
+      let bestScore = -1;
+      for (const block of blocks) {
+        const h2 = block.querySelector('h2[id^="title"]');
+        const text = h2 ? h2.textContent : '';
+        if (!text) continue;
+        // 유사도: 포함 여부 + 길이 차이로 단순 계산
+        const score = normalize(text).includes(normalize(targetName)) ? 100 - Math.abs(normalize(text).length - normalize(targetName).length) : 0;
+        if (score > bestScore) {
+          bestScore = score;
+          bestRid = block.id.replace('block', '');
+        }
       }
-      // 2. 없으면 h2[id^="title"]의 첫번째 id에서 rid 추출
-      const h2 = document.querySelector('h2[id^="title"]');
-      if (h2 && h2.id) {
-        const match = h2.id.match(/^title(.+)/);
-        if (match) return match[1];
-      }
-      return null;
-    });
+      return bestRid;
+    }, name)
 
     await browser.close()
 
