@@ -87,13 +87,14 @@ router.get('/', async (req, res): Promise<any> => {
     // rid 추출 (a[id^="block"] 내부의 h2[id^="title"]에서 장소코드 추출)
     const rid = await page.evaluate((targetName) => {
       const blocks = Array.from(document.querySelectorAll('a[id^="block"]'));
-      const normalize = (s: string) => s.replace(/\s/g, '').toLowerCase();
+      const normalize = (s: string | null) => (s ?? '').replace(/\s/g, '').toLowerCase();
       let bestRid = null;
       let bestScore = -1;
       for (const block of blocks) {
         const h2 = block.querySelector('h2[id^="title"]');
         const text = h2 ? h2.textContent : '';
-        const score = normalize(text).includes(normalize(targetName)) ? 100 - Math.abs(normalize(text).length - normalize(targetName).length) : 0;
+        const normTarget = normalize(targetName);
+        const score = normalize(text).includes(normTarget) ? 100 - Math.abs(normalize(text).length - normTarget.length) : 0;
         if (score > bestScore) {
           bestScore = score;
           // a 태그의 id에서 rid 추출 (예: blockLMy6BQjFbE2W)
