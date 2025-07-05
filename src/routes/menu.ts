@@ -45,26 +45,36 @@ router.get('/', async (req, res): Promise<any> => {
       throw lastError;
     }
 
-    // h2[id^="title"] 로딩 대기 (최대 10초)
+    // a[id^="block"] 로딩 대기 (최대 10초)
     try {
-      await page.waitForSelector('h2[id^="title"]', { timeout: 10000 })
+      await page.waitForSelector('a[id^="block"]', { timeout: 10000 })
     } catch (waitErr) {
       const html = await page.content();
-      console.error('❌ waitForSelector 실패, 현재 HTML:', html.slice(0, 1000)); // 1000자만 출력
+      const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
+      const body = bodyMatch ? bodyMatch[0] : html;
+      console.error('❌ waitForSelector 실패, 현재 BODY:', body.slice(0, 3000));
       await browser.close();
       throw waitErr;
     }
 
-    // rid 추출
+    // rid 추출 (a[id^="block"]에서 rid와 식당명 추출)
     const rid = await page.evaluate((targetName) => {
-      const titles = Array.from(document.querySelectorAll('h2[id^="title"]'))
-
-      const normalize = (s: string) => s.replace(/\s/g, '').toLowerCase()
-      const target = titles.find(el =>
-        normalize(el.textContent || '').includes(normalize(targetName)),
-      )
-
-      return target?.id.replace('title', '') || null
+      const blocks = Array.from(document.querySelectorAll('a[id^="block"]'));
+      const normalize = (s) => s.replace(/\s/g, '').toLowerCase();
+      let bestRid = null;
+      let bestScore = -1;
+      for (const block of blocks) {
+        const h2 = block.querySelector('h2[id^="title"]');
+        const text = h2 ? h2.textContent : '';
+        if (!text) continue;
+        // 유사도: 포함 여부 + 길이 차이로 단순 계산
+        const score = normalize(text).includes(normalize(targetName)) ? 100 - Math.abs(normalize(text).length - normalize(targetName).length) : 0;
+        if (score > bestScore) {
+          bestScore = score;
+          bestRid = block.id.replace('block', '');
+        }
+      }
+      return bestRid;
     }, name)
 
     await browser.close()
