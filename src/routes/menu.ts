@@ -38,6 +38,16 @@ router.get('/', async (req, res): Promise<any> => {
         break;
       } catch (err) {
         lastError = err;
+        // detached frame 에러 발생 시 page 새로고침 후 재시도
+        if (err instanceof Error && err.message && err.message.includes('detached')) {
+          try {
+            await page.reload({ waitUntil: 'domcontentloaded', timeout: 20000 });
+            loaded = true;
+            break;
+          } catch (reloadErr) {
+            lastError = reloadErr;
+          }
+        }
       }
     }
     if (!loaded) {
