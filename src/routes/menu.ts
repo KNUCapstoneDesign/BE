@@ -35,22 +35,32 @@ router.get('/', async (req, res): Promise<any> => {
     };
     t('시작');
 
-    // 검색 페이지 접속 및 로딩 대기 (waitUntil: 'domcontentloaded'로 변경, 더 빠른 진행)
+    // 불필요한 리소스(이미지, 폰트 등) 차단
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+      const resourceType = req.resourceType();
+      if (["image", "stylesheet", "font", "media"].includes(resourceType)) {
+        req.abort();
+      } else {
+        req.continue();
+      }
+    });
+
+    // 검색 페이지 접속 및 로딩 대기 (waitUntil: 'networkidle2'로 최적화)
     const searchUrl = `https://www.diningcode.com/list.php?query=${encodeURIComponent(name)}`
     let loaded = false;
     let lastError = null;
     for (let i = 0; i < 2; i++) { // 최대 2회 재시도
       try {
-        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
+        await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 20000 })
         t('page.goto 완료');
         loaded = true;
         break;
       } catch (err) {
         lastError = err;
-        // detached frame 에러 발생 시 page 새로고침 후 재시도
         if (err instanceof Error && err.message && err.message.includes('detached')) {
           try {
-            await page.reload({ waitUntil: 'domcontentloaded', timeout: 20000 });
+            await page.reload({ waitUntil: 'networkidle2', timeout: 10000 });
             t('page.reload 완료');
             loaded = true;
             break;
@@ -65,18 +75,10 @@ router.get('/', async (req, res): Promise<any> => {
       throw lastError;
     }
 
-    // 페이지가 완전히 렌더링될 때까지 충분히 대기 (networkidle0 + 추가 대기)
-    await page.goto(searchUrl, { waitUntil: 'networkidle0', timeout: 40000 });
-    await new Promise(res => setTimeout(res, 5000)); // React 렌더링 추가 대기
-    t('networkidle0 + 추가 대기 완료');
-
-    // a[id^="block"] 또는 h2[id^="title"]가 나올 때까지 대기 (둘 중 하나만 있어도 통과, 30초까지 대기)
+    // waitForSelector로 a[id^="block"] 또는 h2[id^="title"]가 나올 때까지 대기 (최대 10초)
     let html: string;
     try {
-      await page.waitForFunction(() =>
-        document.querySelector('a[id^="block"]') || document.querySelector('h2[id^="title"]'),
-        { timeout: 30000 }
-      );
+      await page.waitForSelector('a[id^="block"], h2[id^="title"]', { timeout: 10000 });
       html = await page.content();
     } catch (e) {
       html = await page.content();
@@ -90,13 +92,11 @@ router.get('/', async (req, res): Promise<any> => {
 
     // block 또는 title 중 하나만 존재해도 추출 (가장 첫번째로 뜨는 식당의 rid만 추출)
     const rid = await page.evaluate(() => {
-      // 1. a[id^="block"]가 있으면 첫번째 id에서 rid 추출
       const block = document.querySelector('a[id^="block"]');
       if (block && block.id) {
         const match = block.id.match(/^block(.+)/);
         if (match) return match[1];
       }
-      // 2. 없으면 h2[id^="title"]의 첫번째 id에서 rid 추출
       const h2 = document.querySelector('h2[id^="title"]');
       if (h2 && h2.id) {
         const match = h2.id.match(/^title(.+)/);
