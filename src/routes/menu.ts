@@ -46,7 +46,7 @@ router.get('/', async (req, res): Promise<any> => {
     }
 
     // React 렌더링 대기 (2초)
-    await page.waitForTimeout(2000);
+    await new Promise(res => setTimeout(res, 2000));
 
     // a[id^="block"] 로딩 대기 (최대 10초)
     try {
