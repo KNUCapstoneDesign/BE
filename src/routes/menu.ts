@@ -87,40 +87,23 @@ router.get('/', async (req, res): Promise<any> => {
     }
     t('a[id^="block"] 또는 h2[id^="title"] selector HTML에서 확인 완료');
 
-    // block 또는 title 중 하나만 존재해도 추출 (undefined, null, string 모두 안전하게 처리)
-    const rid = await page.evaluate((targetName) => {
-      const normalize = (s: string | null | undefined) => (typeof s === 'string' ? s : '').replace(/\s/g, '').toLowerCase();
-      let bestRid = null;
-      let bestScore = -1;
-      // 1. a[id^="block"] 우선 탐색
-      const blocks = Array.from(document.querySelectorAll('a[id^="block"]'));
-      for (const block of blocks) {
-        const h2 = block.querySelector('h2[id^="title"]');
-        const text = h2 ? h2.textContent : '';
-        const normTarget = normalize(targetName);
-        const score = normalize(text).includes(normTarget) ? 100 - Math.abs(normalize(text).length - normTarget.length) : 0;
-        if (score > bestScore) {
-          bestScore = score;
-          const match = block.id.match(/^block(.+)/);
-          if (match) bestRid = match[1];
-        }
+    // block 또는 title 중 하나만 존재해도 추�� (undefined, null, string 모두 안전하게 처리)
+    // 가장 첫번째로 뜨는 가게의 rid만 추출 (유사도 비교 없이)
+    const rid = await page.evaluate(() => {
+      // 1. a[id^="block"]가 있으면 첫번째 id에서 rid 추출
+      const block = document.querySelector('a[id^="block"]');
+      if (block && block.id) {
+        const match = block.id.match(/^block(.+)/);
+        if (match) return match[1];
       }
-      // 2. 없으면 h2[id^="title"] 단독 탐색
-      if (!bestRid) {
-        const titles = Array.from(document.querySelectorAll('h2[id^="title"]'));
-        for (const h2 of titles) {
-          const text = h2.textContent || '';
-          const normTarget = normalize(targetName);
-          const score = normalize(text).includes(normTarget) ? 100 - Math.abs(normalize(text).length - normTarget.length) : 0;
-          if (score > bestScore) {
-            bestScore = score;
-            const match = h2.id.match(/^title(.+)/);
-            if (match) bestRid = match[1];
-          }
-        }
+      // 2. 없으면 h2[id^="title"]의 첫번째 id에서 rid 추출
+      const h2 = document.querySelector('h2[id^="title"]');
+      if (h2 && h2.id) {
+        const match = h2.id.match(/^title(.+)/);
+        if (match) return match[1];
       }
-      return bestRid;
-    }, name ?? '');
+      return null;
+    });
 
     await browser.close()
 
