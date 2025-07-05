@@ -69,30 +69,16 @@ router.get('/', async (req, res): Promise<any> => {
     await new Promise(res => setTimeout(res, 3000));
     t('React 렌더링 대기 완료');
 
-    // a[id^="block"] 로딩 대기 (최대 10초)
-    let selectorFound = false;
-    try {
-      await page.waitForSelector('a[id^="block"]', { timeout: 10000 })
-      t('waitForSelector 완료')
-      selectorFound = true;
-    } catch (waitErr) {
-      const html = await page.content();
-      // selector가 실제 HTML에 있는지 검사
-      if (html.includes('id="block')) {
-        console.warn('waitForSelector는 실패했지만, HTML에 a[id^="block"]이 존재합니다. 강제 진행.');
-        selectorFound = true;
-      } else {
-        const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
-        const body = bodyMatch ? bodyMatch[0] : html;
-        console.error('❌ waitForSelector 실패, 현재 BODY:', body.slice(0, 3000));
-        await browser.close();
-        throw waitErr;
-      }
-    }
-    if (!selectorFound) {
+    // waitForSelector 없이 바로 HTML에서 a[id^="block"] 존재 여부 확인 후 진행
+    const html = await page.content();
+    if (!html.includes('id="block')) {
+      const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
+      const body = bodyMatch ? bodyMatch[0] : html;
+      console.error('❌ a[id^="block"] selector를 찾지 못했습니다. 현재 BODY:', body.slice(0, 3000));
       await browser.close();
-      throw new Error('a[id^="block"] selector를 찾지 못했습니다.');
+      return res.status(404).json({ error: 'a[id^="block"] selector를 찾지 못했습니다.' });
     }
+    t('a[id^="block"] selector HTML에서 확인 완료');
 
     // rid 추출 (a[id^="block"]에서 rid와 식당명 추출)
     const rid = await page.evaluate((targetName) => {
