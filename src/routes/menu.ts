@@ -71,12 +71,13 @@ router.get('/', async (req, res): Promise<any> => {
 
     // a[id^="block"] 로딩 대기 (최대 10초)
     let selectorFound = false;
+    let html = '';
     try {
       await page.waitForSelector('a[id^="block"]', { timeout: 10000 })
       t('waitForSelector 완료')
       selectorFound = true;
     } catch (waitErr) {
-      const html = await page.content();
+      html = await page.content();
       // selector가 실제 HTML에 있는지 검사
       if (html.includes('id="block')) {
         console.warn('waitForSelector는 실패했지만, HTML에 a[id^="block"]이 존재합니다. 강제 진행.');
@@ -94,25 +95,24 @@ router.get('/', async (req, res): Promise<any> => {
       throw new Error('a[id^="block"] selector를 찾지 못했습니다.');
     }
 
-    // rid 추출 (a[id^="block"]에서 rid와 식당명 추출)
-    const rid = await page.evaluate((targetName) => {
-      const blocks = Array.from(document.querySelectorAll('a[id^="block"]'));
-      const normalize = (s: string) => s.replace(/\s/g, '').toLowerCase();
-      let bestRid = null;
-      let bestScore = -1;
-      for (const block of blocks) {
-        const h2 = block.querySelector('h2[id^="title"]');
-        const text = h2 ? h2.textContent : '';
-        if (!text) continue;
-        // 유사도: 포함 여부 + 길이 차이로 단순 계산
-        const score = normalize(text).includes(normalize(targetName)) ? 100 - Math.abs(normalize(text).length - normalize(targetName).length) : 0;
-        if (score > bestScore) {
-          bestScore = score;
-          bestRid = block.id.replace('block', '');
-        }
+    // block 중 목록의 가장 상단에 있는 block의 rid 추출
+    let rid: string | null = null;
+    if (html) {
+      const $ = cheerio.load(html);
+      const block = $('a[id^="block"]').first();
+      if (block.length) {
+        const match = block.attr('id')?.match(/^block(.+)/);
+        if (match) rid = match[1];
       }
-      return bestRid;
-    }, name)
+    } else {
+      rid = await page.evaluate(() => {
+        const block = document.querySelector('a[id^="block"]');
+        if (block && block.id) {
+          return block.id.replace('block', '');
+        }
+        return null;
+      });
+    }
 
     await browser.close()
 
