@@ -24,20 +24,19 @@ router.get('/', async (req, res): Promise<any> => {
     const $ = cheerio.load(html)
     // a[id^="block"]에서 rid와 식당명 추출
     let bestRid: string | null = null
-    let bestScore = -1
     const normalize = (s: string) => s.replace(/[^\w가-힣]/g, '').toLowerCase();
+    const normalizedName = normalize(name)
+    // 검색 결과 중 식당명에 name이 포함된 첫 번째 결과 반환
     $('a[id^="block"]').each((_, el) => {
       const block = $(el)
       const h2 = block.find('h2[id^="title"]')
       const text = h2.text()
       if (!text) return
-      const score = normalize(text).includes(normalize(name)) ? 100 - Math.abs(normalize(text).length - normalize(name).length) : 0
-      if (score > bestScore) {
-        bestScore = score
+      if (normalize(text).includes(normalizedName) && !bestRid) {
         bestRid = block.attr('id')?.replace('block', '') || null
       }
     })
-    // 검색 결과가 1개 이상이면 무조건 첫 번째 결과라도 반환
+    // 포함된 결과가 없으면 첫 번째 결과라도 반환
     if (!bestRid) {
       const firstBlock = $('a[id^="block"]').first()
       bestRid = firstBlock.attr('id')?.replace('block', '') || null
