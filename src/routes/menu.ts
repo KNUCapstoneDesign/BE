@@ -35,13 +35,13 @@ router.get('/', async (req, res): Promise<any> => {
     };
     t('시작');
 
-    // 검색 페이지 접속 및 로딩 대기 (타임아웃 60초, domcontentloaded)
+    // 검색 페이지 접속 및 로딩 대기 (waitUntil: 'domcontentloaded'로 변경, 더 빠른 진행)
     const searchUrl = `https://www.diningcode.com/list.php?query=${encodeURIComponent(name)}`
     let loaded = false;
     let lastError = null;
     for (let i = 0; i < 2; i++) { // 최대 2회 재시도
       try {
-        await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 60000 })
+        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
         t('page.goto 완료');
         loaded = true;
         break;
