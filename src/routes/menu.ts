@@ -27,6 +27,14 @@ router.get('/', async (req, res): Promise<any> => {
     })
     await page.setViewport({ width: 1280, height: 800 })
 
+    const startAll = Date.now();
+    const t = (label: string) => {
+      const now = Date.now();
+      console.log(`[크롤링 타이밍] ${label}: ${(now - startAll) / 1000}s 경과`);
+      return now;
+    };
+    t('시작');
+
     // 검색 페이지 접속 및 로딩 대기 (타임아웃 60초, domcontentloaded)
     const searchUrl = `https://www.diningcode.com/list.php?query=${encodeURIComponent(name)}`
     let loaded = false;
@@ -34,6 +42,7 @@ router.get('/', async (req, res): Promise<any> => {
     for (let i = 0; i < 2; i++) { // 최대 2회 재시도
       try {
         await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 60000 })
+        t('page.goto 완료');
         loaded = true;
         break;
       } catch (err) {
@@ -42,6 +51,7 @@ router.get('/', async (req, res): Promise<any> => {
         if (err instanceof Error && err.message && err.message.includes('detached')) {
           try {
             await page.reload({ waitUntil: 'domcontentloaded', timeout: 20000 });
+            t('page.reload 완료');
             loaded = true;
             break;
           } catch (reloadErr) {
@@ -55,19 +65,33 @@ router.get('/', async (req, res): Promise<any> => {
       throw lastError;
     }
 
-    // React 렌더링 대기 (2초)
-    await new Promise(res => setTimeout(res, 2000));
+    // React 렌더링 대기 (3초로 증가)
+    await new Promise(res => setTimeout(res, 3000));
+    t('React 렌더링 대기 완료');
 
     // a[id^="block"] 로딩 대기 (최대 10초)
+    let selectorFound = false;
     try {
       await page.waitForSelector('a[id^="block"]', { timeout: 10000 })
+      t('waitForSelector 완료')
+      selectorFound = true;
     } catch (waitErr) {
       const html = await page.content();
-      const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
-      const body = bodyMatch ? bodyMatch[0] : html;
-      console.error('❌ waitForSelector 실패, 현재 BODY:', body.slice(0, 3000));
+      // selector가 실제 HTML에 있는지 검사
+      if (html.includes('id="block')) {
+        console.warn('waitForSelector는 실패했지만, HTML에 a[id^="block"]이 존재합니다. 강제 진행.');
+        selectorFound = true;
+      } else {
+        const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
+        const body = bodyMatch ? bodyMatch[0] : html;
+        console.error('❌ waitForSelector 실패, 현재 BODY:', body.slice(0, 3000));
+        await browser.close();
+        throw waitErr;
+      }
+    }
+    if (!selectorFound) {
       await browser.close();
-      throw waitErr;
+      throw new Error('a[id^="block"] selector를 찾지 못했습니다.');
     }
 
     // rid 추출 (a[id^="block"]에서 rid와 식당명 추출)
