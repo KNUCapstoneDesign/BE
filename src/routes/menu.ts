@@ -65,38 +65,39 @@ router.get('/', async (req, res): Promise<any> => {
       throw lastError;
     }
 
-    // React 렌더링 대기 (3초로 증가)
-    await new Promise(res => setTimeout(res, 3000));
+    // React 렌더링 대기 (5초로 증가)
+    await new Promise(res => setTimeout(res, 5000));
     t('React 렌더링 대기 완료');
 
-    // waitForSelector로 h2[id^="title"]가 나올 때까지 대기
+    // a[id^="block"]가 나올 때까지 대기 후, 내부에서 h2[id^="title"]로 rid 추출
     let html: string;
     try {
-      await page.waitForSelector('h2[id^="title"]', { timeout: 12000 });
+      await page.waitForSelector('a[id^="block"]', { timeout: 15000 });
       html = await page.content();
     } catch (e) {
       html = await page.content();
       const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
       const body = bodyMatch ? bodyMatch[0] : html;
-      console.error('❌ h2[id^="title"] selector를 찾지 못했습니다. 현재 BODY:', body.slice(0, 3000));
+      console.error('❌ a[id^="block"] selector를 찾지 못했습니다. 현재 BODY:', body.slice(0, 3000));
       await browser.close();
       return res.status(404).json({ error: '검색 결과가 없거나 사이트 구조가 변경되었습니다.' });
     }
-    t('h2[id^="title"] selector HTML에서 확인 완료');
+    t('a[id^="block"] selector HTML에서 확인 완료');
 
-    // rid 추출 (h2[id^="title"]에서 장소코드 추출)
+    // rid 추출 (a[id^="block"] 내부의 h2[id^="title"]에서 장소코드 추출)
     const rid = await page.evaluate((targetName) => {
-      const titles = Array.from(document.querySelectorAll('h2[id^="title"]'));
+      const blocks = Array.from(document.querySelectorAll('a[id^="block"]'));
       const normalize = (s: string) => s.replace(/\s/g, '').toLowerCase();
       let bestRid = null;
       let bestScore = -1;
-      for (const h2 of titles) {
-        const text = h2.textContent || '';
+      for (const block of blocks) {
+        const h2 = block.querySelector('h2[id^="title"]');
+        const text = h2 ? h2.textContent : '';
         const score = normalize(text).includes(normalize(targetName)) ? 100 - Math.abs(normalize(text).length - normalize(targetName).length) : 0;
         if (score > bestScore) {
           bestScore = score;
-          // h2의 id에서 숫자만 추출 (예: title123456)
-          const match = h2.id.match(/title(\d+)/);
+          // a 태그의 id에서 rid 추출 (예: blockLMy6BQjFbE2W)
+          const match = block.id.match(/^block(.+)/);
           if (match) bestRid = match[1];
         }
       }
