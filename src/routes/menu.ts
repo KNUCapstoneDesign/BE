@@ -5,13 +5,11 @@ import puppeteer from 'puppeteer'
 const router = express.Router()
 
 router.get('/', async (req, res): Promise<any> => {
-  const { name, addr } = req.query;
+  const { name } = req.query
 
   if (!name || typeof name !== 'string') {
     return res.status(400).json({ error: 'Missing or invalid name parameter' })
   }
-  // addr는 "시 구" 형태로 전달받음. 예: "대구광역시 중구"
-  const addrFilter = typeof addr === 'string' ? addr.trim() : '';
 
   try {
     const browser = await puppeteer.launch({
@@ -99,26 +97,12 @@ router.get('/', async (req, res): Promise<any> => {
 
     // block 중 목록의 가장 상단에 있는 block의 rid 추출
     let rid: string | null = null;
-    let filteredBlockId: string | null = null;
     if (html) {
       const $ = cheerio.load(html);
-      // 모든 검색 결과 block을 순회하며 주소(class="Adress")가 addrFilter(시, 구)와 일치하는지 확인
-      const blocks = $('a[id^="block"]');
-      for (let i = 0; i < blocks.length; i++) {
-        const block = blocks.eq(i);
-        const address = block.find('.Adress').text().trim();
-        // addrFilter가 없으면 첫번째, 있으면 시/구가 모두 포함된 것만
-        if (!addrFilter || (address && addrFilter.split(' ').every(part => address.includes(part)))) {
-          filteredBlockId = block.attr('id') || null;
-          rid = block.attr('rid') || null;
-          break;
-        }
-      }
-      // 만약 필터링된 결과가 없으면 기존 방식대로 첫번째 block 사용
-      if (!filteredBlockId) {
-        const firstBlock = $('a[id^="block"]').first();
-        filteredBlockId = firstBlock.attr('id') || null;
-        rid = firstBlock.attr('rid') || null;
+      const block = $('a[id^="block"]').first();
+      if (block.length) {
+        const match = block.attr('id')?.match(/^block(.+)/);
+        if (match) rid = match[1];
       }
     } else {
       rid = await page.evaluate(() => {
