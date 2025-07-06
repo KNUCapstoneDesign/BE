@@ -69,28 +69,39 @@ router.get('/', async (req, res): Promise<any> => {
     await new Promise(res => setTimeout(res, 3000));
     t('React 렌더링 대기 완료');
 
-    // a[id^="block"] 로딩 대기 (최대 10초)
+    // 광고/팝업 닫기 시도 (검색 직후, polling 루프 안에 추가)
+    await page.evaluate(() => {
+      document.querySelectorAll('.close, .popup-close, .ad_close, [aria-label="닫기"], [aria-label="Close"]').forEach(btn => (btn as HTMLElement).click());
+    });
+    // a[id^="block"] 로딩 대기 (최대 20초, polling)
     let selectorFound = false;
     let html = '';
-    try {
+    const maxWait = 20000; // 20초
+    const pollInterval = 500;
+    let waited = 0;
+    while (waited < maxWait) {
       html = await page.content();
-      // selector가 실제 HTML에 있는지 검사
       if (html.includes('id="block')) {
-        console.warn('HTML에 a[id^="block"]이 존재합니다. 강제 진행.');
         selectorFound = true;
-      } else {
-        await page.waitForSelector('a[id^="block"]', { timeout: 1000 });
-        t('waitForSelector 완료');
-        selectorFound = true;
+        break;
       }
-    } catch (waitErr) {
-      const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
-      const body = bodyMatch ? bodyMatch[0] : html;
-      console.error('❌ waitForSelector 실패, 현재 BODY:', body.slice(0, 3000));
-      await browser.close();
-      throw waitErr;
+      try {
+        await page.waitForSelector('a[id^="block"]', { timeout: pollInterval });
+        selectorFound = true;
+        break;
+      } catch (e) {
+        // 계속 polling
+      }
+      // 광고/팝업 닫기 반복 시도
+      await page.evaluate(() => {
+        document.querySelectorAll('.close, .popup-close, .ad_close, [aria-label="닫기"], [aria-label="Close"]').forEach(btn => (btn as HTMLElement).click());
+      });
+      waited += pollInterval;
     }
     if (!selectorFound) {
+      const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
+      const body = bodyMatch ? bodyMatch[0] : html;
+      console.error('❌ waitForSelector polling 실패, 현재 BODY:', body.slice(0, 3000));
       await browser.close();
       throw new Error('a[id^="block"] selector를 찾지 못했습니다.');
     }
