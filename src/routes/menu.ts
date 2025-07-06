@@ -73,22 +73,22 @@ router.get('/', async (req, res): Promise<any> => {
     let selectorFound = false;
     let html = '';
     try {
-      await page.waitForSelector('a[id^="block"]', { timeout: 10000 })
-      t('waitForSelector 완료')
-      selectorFound = true;
-    } catch (waitErr) {
       html = await page.content();
       // selector가 실제 HTML에 있는지 검사
       if (html.includes('id="block')) {
-        console.warn('waitForSelector는 실패했지만, HTML에 a[id^="block"]이 존재합니다. 강제 진행.');
+        console.warn('HTML에 a[id^="block"]이 존재합니다. 강제 진행.');
         selectorFound = true;
       } else {
-        const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
-        const body = bodyMatch ? bodyMatch[0] : html;
-        console.error('❌ waitForSelector 실패, 현재 BODY:', body.slice(0, 3000));
-        await browser.close();
-        throw waitErr;
+        await page.waitForSelector('a[id^="block"]', { timeout: 1000 });
+        t('waitForSelector 완료');
+        selectorFound = true;
       }
+    } catch (waitErr) {
+      const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
+      const body = bodyMatch ? bodyMatch[0] : html;
+      console.error('❌ waitForSelector 실패, 현재 BODY:', body.slice(0, 3000));
+      await browser.close();
+      throw waitErr;
     }
     if (!selectorFound) {
       await browser.close();
