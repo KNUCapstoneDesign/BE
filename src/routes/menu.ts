@@ -130,12 +130,15 @@ router.get('/', async (req, res): Promise<any> => {
     const detailHtml = await detailResponse.text()
     const $ = cheerio.load(detailHtml)
 
+    // 평점 추출
+    const rating = $('.Restaurant_RatingScore').first().text().trim() || null;
+
     const menus = $('.list.Restaurant_MenuList > li').map((_, el) => ({
       name: $(el).find('.Restaurant_Menu').text().trim(),
       price: $(el).find('.Restaurant_MenuPrice').text().trim(),
     })).get()
 
-    return res.json({ menus })
+    return res.json({ menus, rating })
   } catch (err) {
     console.error('❌ 크롤링 실패:', err)
     return res.status(500).json({ error: 'Server error' })
