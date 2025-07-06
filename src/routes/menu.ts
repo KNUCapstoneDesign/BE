@@ -66,7 +66,7 @@ router.get('/', async (req, res): Promise<any> => {
     }
 
     // React 렌더링 대기 (3초로 증가)
-    await new Promise(res => setTimeout(res, 1000));
+    await new Promise(res => setTimeout(res, 3000));
     t('React 렌더링 대기 완료');
 
     // a[id^="block"] 로딩 대기 (최대 10초)
