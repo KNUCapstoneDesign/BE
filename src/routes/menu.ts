@@ -27,6 +27,14 @@ router.get('/', async (req, res): Promise<any> => {
     })
     await page.setViewport({ width: 1280, height: 800 })
 
+    // 불필요한 리소스 로딩 차단
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+      const type = req.resourceType();
+      if (["image", "stylesheet", "font", "media"].includes(type)) req.abort();
+      else req.continue();
+    });
+
     const startAll = Date.now();
     const t = (label: string) => {
       const now = Date.now();
@@ -66,7 +74,7 @@ router.get('/', async (req, res): Promise<any> => {
     }
 
     // React 렌더링 대기 (3초로 증가)
-    await new Promise(res => setTimeout(res, 3000));
+    await new Promise(res => setTimeout(res, 1500));
     t('React 렌더링 대기 완료');
 
     // a[id^="block"] 로딩 대기 (최대 10초)
