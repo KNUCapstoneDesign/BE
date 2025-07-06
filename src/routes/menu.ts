@@ -69,59 +69,53 @@ router.get('/', async (req, res): Promise<any> => {
     await new Promise(res => setTimeout(res, 3000));
     t('React 렌더링 대기 완료');
 
-    // block selector를 DOM에서 바로 찾기 (cheerio 파싱 전 빠른 확인)
-    const blockHandle = await page.$('a[id^="block"]');
-    let rid: string | null = null;
-    if (blockHandle) {
-      // selector가 있으면 바로 id 추출
-      const id = await blockHandle.evaluate((el) => el.id);
-      const match = id.match(/^block(.+)/);
-      if (match) rid = match[1];
-      await browser.close();
-    } else {
-      // 기존 로직 (HTML 파싱 및 waitForSelector 등)
-      let selectorFound = false;
-      let html = '';
-      try {
-        html = await page.content();
-        if (html.includes('id="block')) {
-          console.warn('HTML에 a[id^="block"]이 존재합니다. 강제 진행.');
-          selectorFound = true;
-        } else {
-          await page.waitForSelector('a[id^="block"]', { timeout: 1000 });
-          t('waitForSelector 완료');
-          selectorFound = true;
-        }
-      } catch (waitErr) {
-        const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
-        const body = bodyMatch ? bodyMatch[0] : html;
-        console.error('❌ waitForSelector 실패, 현재 BODY:', body.slice(0, 3000));
-        await browser.close();
-        throw waitErr;
-      }
-      if (!selectorFound) {
-        await browser.close();
-        throw new Error('a[id^="block"] selector를 찾지 못했습니다.');
-      }
-      // block 중 목록의 가장 상단에 있는 block의 rid 추출
-      if (html) {
-        const $ = cheerio.load(html);
-        const block = $('a[id^="block"]').first();
-        if (block.length) {
-          const match = block.attr('id')?.match(/^block(.+)/);
-          if (match) rid = match[1];
-        }
+    // a[id^="block"] 로딩 대기 (최대 10초)
+    let selectorFound = false;
+    let html = '';
+    try {
+      html = await page.content();
+      // selector가 실제 HTML에 있는지 검사
+      if (html.includes('id="block')) {
+        console.warn('HTML에 a[id^="block"]이 존재합니다. 강제 진행.');
+        selectorFound = true;
       } else {
-        rid = await page.evaluate(() => {
-          const block = document.querySelector('a[id^="block"]');
-          if (block && block.id) {
-            return block.id.replace('block', '');
-          }
-          return null;
-        });
+        await page.waitForSelector('a[id^="block"]', { timeout: 1000 });
+        t('waitForSelector 완료');
+        selectorFound = true;
       }
+    } catch (waitErr) {
+      const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
+      const body = bodyMatch ? bodyMatch[0] : html;
+      console.error('❌ waitForSelector 실패, 현재 BODY:', body.slice(0, 3000));
       await browser.close();
+      throw waitErr;
     }
+    if (!selectorFound) {
+      await browser.close();
+      throw new Error('a[id^="block"] selector를 찾지 못했습니다.');
+    }
+
+    // block 중 목록의 가장 상단에 있는 block의 rid 추출
+    let rid: string | null = null;
+    if (html) {
+      const $ = cheerio.load(html);
+      const block = $('a[id^="block"]').first();
+      if (block.length) {
+        const match = block.attr('id')?.match(/^block(.+)/);
+        if (match) rid = match[1];
+      }
+    } else {
+      rid = await page.evaluate(() => {
+        const block = document.querySelector('a[id^="block"]');
+        if (block && block.id) {
+          return block.id.replace('block', '');
+        }
+        return null;
+      });
+    }
+
+    await browser.close()
+
     if (!rid) {
       return res.status(404).json({ error: 'No matching restaurant title found' })
     }
