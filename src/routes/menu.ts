@@ -130,8 +130,12 @@ router.get('/', async (req, res): Promise<any> => {
     const detailHtml = await detailResponse.text()
     const $ = cheerio.load(detailHtml)
 
-    // 평점 추출
-    const rating = $('.Restaurant_RatingScore').first().text().trim() || null;
+    // 평점 추출 (id="lbl_review_point" 우선, 없으면 기존 방식)
+    let rating = null;
+    const ratingById = $('#lbl_review_point').first().text().trim();
+    if (ratingById)
+      rating = ratingById;
+
 
     const menus = $('.list.Restaurant_MenuList > li').map((_, el) => ({
       name: $(el).find('.Restaurant_Menu').text().trim(),
