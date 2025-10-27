@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 import { closeConnection } from './config/db';
 import authRoutes from './routes/auth.routes';
 import menuRouter from './routes/menu'
@@ -37,6 +38,15 @@ app.use(cors({
 
 app.use(morgan('dev'));
 app.use(express.json());
+
+// Tour API 프록시
+app.use('/api/tour', createProxyMiddleware({
+    target: 'https://apis.data.go.kr/B551011/KorService2',
+    changeOrigin: true,
+    pathRewrite: {
+        '^/api/tour': '',
+    },
+}));
 
 // 라우터 연결
 app.use('/api/auth', authRoutes);
