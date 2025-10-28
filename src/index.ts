@@ -39,7 +39,7 @@ app.use(cors({
 app.use(morgan('dev'));
 app.use(express.json());
 
-// Tour API 프록시
+/* Tour API 프록시
 app.use('/api/tour', createProxyMiddleware({
     target: 'https://apis.data.go.kr/B551011/KorService2',
     changeOrigin: true,
@@ -47,6 +47,7 @@ app.use('/api/tour', createProxyMiddleware({
         '^/api/tour': '',
     },
 }));
+*/
 
 // 라우터 연결
 app.use('/api/auth', authRoutes);
