@@ -26,28 +26,23 @@ const allowedOrigins = [
 ];
 
 app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: allowedOrigins,
   credentials: true,
 }));
 
 app.use(morgan('dev'));
 app.use(express.json());
 
-/* Tour API 프록시
-app.use('/api/tour', createProxyMiddleware({
-    target: 'https://apis.data.go.kr/B551011/KorService2',
-    changeOrigin: true,
-    pathRewrite: {
-        '^/api/tour': '',
-    },
-}));
-*/
+// 로컬 개발 환경일 때만 Tour API 프록시를 활성화합니다.
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api/tour', createProxyMiddleware({
+      target: 'https://apis.data.go.kr/B551011/KorService2',
+      changeOrigin: true,
+      pathRewrite: {
+          '^/api/tour': '',
+      },
+  }));
+}
 
 // 라우터 연결
 app.use('/api/auth', authRoutes);
