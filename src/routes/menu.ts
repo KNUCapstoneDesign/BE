@@ -1,18 +1,24 @@
 import express from 'express'
 import * as cheerio from 'cheerio'
 import puppeteer from 'puppeteer'
+import axios from 'axios' // 1. axios 임포트
 
 const router = express.Router()
 
 router.get('/', async (req, res): Promise<any> => {
   const { name } = req.query
+  const includeNoPrice = String(req.query.includeNoPrice) === 'true' // 2. 쿼리 변수 상단으로 이동
 
   if (!name || typeof name !== 'string') {
     return res.status(400).json({ error: 'Missing or invalid name parameter' })
   }
 
+  let browser; // 3. try/catch/finally에서 browser를 참조하기 위해 상단에 선언
+
   try {
-    const browser = await puppeteer.launch({
+    // --- 1. rid 추출 (Puppeteer) ---
+    // (기존 코드와 동일)
+    browser = await puppeteer.launch({
       headless: true,
       args: [
         '--no-sandbox',
@@ -21,10 +27,11 @@ router.get('/', async (req, res): Promise<any> => {
       ],
     })
     const page = await browser.newPage()
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
-    await page.setExtraHTTPHeaders({
-      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-    })
+    const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+    const acceptLanguage = 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
+
+    await page.setUserAgent(userAgent)
+    await page.setExtraHTTPHeaders({ 'Accept-Language': acceptLanguage })
     await page.setViewport({ width: 1280, height: 800 })
 
     const startAll = Date.now();
@@ -35,11 +42,10 @@ router.get('/', async (req, res): Promise<any> => {
     };
     t('시작');
 
-    // 검색 페이지 접속 및 로딩 대기 (waitUntil: 'domcontentloaded'로 변경, 더 빠른 진행)
     const searchUrl = `https://www.diningcode.com/list.php?query=${encodeURIComponent(name)}`
     let loaded = false;
     let lastError = null;
-    for (let i = 0; i < 2; i++) { // 최대 2회 재시도
+    for (let i = 0; i < 2; i++) {
       try {
         await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
         t('page.goto 완료');
@@ -47,7 +53,6 @@ router.get('/', async (req, res): Promise<any> => {
         break;
       } catch (err) {
         lastError = err;
-        // detached frame 에러 발생 시 page 새로고침 후 재시도
         if (err instanceof Error && err.message && err.message.includes('detached')) {
           try {
             await page.reload({ waitUntil: 'domcontentloaded', timeout: 20000 });
@@ -61,22 +66,20 @@ router.get('/', async (req, res): Promise<any> => {
       }
     }
     if (!loaded) {
-      await browser.close();
+      if (browser) await browser.close(); // 4. 실패 시 브라우저 종료
       throw lastError;
     }
 
-    // React 렌더링 대기 (3초로 증가)
     await new Promise(res => setTimeout(res, 3000));
     t('React 렌더링 대기 완료');
 
-    // 광고/팝업 닫기 시도 (검색 직후, polling 루프 안에 추가)
     await page.evaluate(() => {
       document.querySelectorAll('.close, .popup-close, .ad_close, [aria-label="닫기"], [aria-label="Close"]').forEach(btn => (btn as HTMLElement).click());
     });
-    // a[id^="block"] 로딩 대기 (최대 20초, polling)
+
     let selectorFound = false;
     let html = '';
-    const maxWait = 20000; // 20초
+    const maxWait = 20000;
     const pollInterval = 500;
     let waited = 0;
     while (waited < maxWait) {
@@ -89,10 +92,7 @@ router.get('/', async (req, res): Promise<any> => {
         await page.waitForSelector('a[id^="block"]', { timeout: pollInterval });
         selectorFound = true;
         break;
-      } catch (e) {
-        // 계속 polling
-      }
-      // 광고/팝업 닫기 반복 시도
+      } catch (e) { /* (polling) */ }
       await page.evaluate(() => {
         document.querySelectorAll('.close, .popup-close, .ad_close, [aria-label="닫기"], [aria-label="Close"]').forEach(btn => (btn as HTMLElement).click());
       });
@@ -102,11 +102,10 @@ router.get('/', async (req, res): Promise<any> => {
       const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
       const body = bodyMatch ? bodyMatch[0] : html;
       console.error('❌ waitForSelector polling 실패, 현재 BODY:', body.slice(0, 3000));
-      await browser.close();
+      if (browser) await browser.close(); // 4. 실패 시 브라우저 종료
       throw new Error('a[id^="block"] selector를 찾지 못했습니다.');
     }
 
-    // block 중 목록의 가장 상단에 있는 block의 rid 추출
     let rid: string | null = null;
     if (html) {
       const $ = cheerio.load(html);
@@ -115,7 +114,7 @@ router.get('/', async (req, res): Promise<any> => {
         const match = block.attr('id')?.match(/^block(.+)/);
         if (match) rid = match[1];
       }
-    } else {
+    } else { /* (fallback) */
       rid = await page.evaluate(() => {
         const block = document.querySelector('a[id^="block"]');
         if (block && block.id) {
@@ -125,37 +124,68 @@ router.get('/', async (req, res): Promise<any> => {
       });
     }
 
-    await browser.close()
-
     if (!rid) {
+      if (browser) await browser.close(); // 4. 실패 시 브라우저 종료
       return res.status(404).json({ error: 'No matching restaurant title found' })
     }
 
-    // fetch를 동적으로 import
-    const fetch = (await import('node-fetch')).default;
-    // 상세 페이지 메뉴 크롤링
+    // --- 5. rid 추출 완료, Puppeteer 종료 ---
+    await browser.close()
+    browser = undefined; // 닫혔음을 명시
+    t('Puppeteer 종료 및 rid 획득: ' + rid);
+
+    // --- 6. 상세 페이지 정적 크롤링 (Axios + Cheerio) ---
     const detailUrl = `https://www.diningcode.com/profile.php?rid=${rid}`
-    const detailResponse = await fetch(detailUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-    })
-    const detailHtml = await detailResponse.text()
-    const $ = cheerio.load(detailHtml)
 
-    // 평점 추출 (id="lbl_review_point" 우선, 없으면 기존 방식)
-    let rating = null;
-    const ratingById = $('#lbl_review_point').first().text().trim();
-    if (ratingById)
-      rating = ratingById;
+    const { data: detailHtml } = await axios.get(detailUrl, {
+      headers: {
+        'User-Agent': userAgent, // Puppeteer와 동일한 User-Agent 사용
+        'Accept-Language': acceptLanguage, // 동일한 언어 설정
+      }
+    });
+    t('Axios 상세 페이지 HTML 로드 완료');
 
+    const $ = cheerio.load(detailHtml);
 
-    const menus = $('.list.Restaurant_MenuList > li').map((_, el) => ({
-      name: $(el).find('.Restaurant_Menu').text().trim(),
-      price: $(el).find('.Restaurant_MenuPrice').text().trim(),
-    })).get()
+    // 평점 추출
+    const rating = $('#lbl_review_point').text().trim() || null;
 
-    return res.json({ menus, rating })
+    // 메뉴 추출
+    const menus: Array<{ name: string; price: string }> = [];
+    $('ul.list.Restaurant-MenuList > li').each((i, el) => {
+      const name = $(el).find('span.restaurant-menu').text().trim();
+      const price = $(el).find('p.restaurant-price').text().trim();
+
+      if (name && name !== '메뉴 모두 보기') {
+        if (includeNoPrice) {
+          menus.push({ name, price: price || '' });
+        } else if (price) {
+          menus.push({ name, price });
+        }
+      }
+    });
+
+    // 중복 제거 로직 (필요시)
+    const seen = new Set<string>();
+    const dedupedMenus = menus.filter(m => {
+      const key = `${m.name}|${m.price}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        return true;
+      }
+      return false;
+    });
+
+    console.log('Menus found:', dedupedMenus);
+    t('Cheerio 파싱 완료');
+
+    return res.json({ menus: dedupedMenus, rating })
+
   } catch (err) {
     console.error('❌ 크롤링 실패:', err)
+    if (browser) {
+      await browser.close(); // 7. 예외 발생 시 브라우저 종료
+    }
     return res.status(500).json({ error: 'Server error' })
   }
 })
