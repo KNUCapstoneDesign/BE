@@ -125,105 +125,33 @@ router.get('/', async (req, res): Promise<any> => {
       });
     }
 
+    await browser.close()
+
     if (!rid) {
-      await browser.close()
       return res.status(404).json({ error: 'No matching restaurant title found' })
     }
 
+    // fetch를 동적으로 import
+    const fetch = (await import('node-fetch')).default;
     // 상세 페이지 메뉴 크롤링
     const detailUrl = `https://www.diningcode.com/profile.php?rid=${rid}`
-    await page.goto(detailUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
-    // React 렌더링 대기
-    await new Promise(res => setTimeout(res, 3000));
+    const detailResponse = await fetch(detailUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    })
+    const detailHtml = await detailResponse.text()
+    const $ = cheerio.load(detailHtml)
 
-    // 평점 추출
-    let rating = await page.evaluate(() => {
-      const ratingEl = document.querySelector('#lbl_review_point');
-      return ratingEl ? ratingEl.textContent?.trim() : null;
-    });
+    // 평점 추출 (id="lbl_review_point" 우선, 없으면 기존 방식)
+    let rating = null;
+    const ratingById = $('#lbl_review_point').first().text().trim();
+    if (ratingById)
+      rating = ratingById;
 
-    // 가격 없는 항목 포함 여부 (쿼리: includeNoPrice=true)
-    const includeNoPrice = String(req.query.includeNoPrice) === 'true';
 
-    // 메뉴 섹션 펼치기 시도 (메뉴 모두 보기)
-    try {
-      await page.evaluate(() => {
-        try {
-          if (typeof (window as any).setMore === 'function') {
-            (window as any).setMore('menu-info');
-          }
-        } catch {}
-        const nodes = Array.from(document.querySelectorAll('a, button, span, div'));
-        const moreBtn = nodes.find(el => (el.textContent || '').includes('메뉴 모두 보기')) as any;
-        if (moreBtn && typeof moreBtn.click === 'function') {
-          moreBtn.click();
-        }
-        const menu = (document.querySelector('#menu-info, .menu-info') as any) || null;
-        if (menu && menu.style) {
-          menu.style.maxHeight = 'none';
-          menu.style.overflow = 'visible';
-        }
-      });
-  await new Promise(res => setTimeout(res, 600));
-    } catch {}
-
-    // 메뉴 추출 (구조화 리스트 우선, 없으면 전체 텍스트 파싱 + 중복 제거)
-    const menus = await page.evaluate((opts: { includeNoPrice: boolean }) => {
-      const structuredLis = Array.from(document.querySelectorAll('.list.Restaurant_MenuList > li'));
-      const pickName = (el: Element) => (el.querySelector('.Restaurant_Menu')?.textContent || '').trim();
-      const pickPrice = (el: Element) => (el.querySelector('.Restaurant_MenuPrice')?.textContent || '').trim();
-      let results: Array<{ name: string; price: string }> = [];
-      if (structuredLis.length > 0) {
-        results = structuredLis.map(el => ({ name: pickName(el), price: pickPrice(el) }))
-          .filter(m => m.name && m.name !== '메뉴 모두 보기')
-          .filter(m => opts.includeNoPrice ? true : !!m.price);
-      } else {
-        const container = (document.querySelector('#menu-info') || document.querySelector('.menu-info')) as HTMLElement | null;
-        if (!container) return [];
-        const lines = (container.textContent || '')
-          .split('\n')
-          .map(l => l.trim())
-          .filter(l => l)
-          .filter(l => !/주문했어요|%|\b\d+위\b/.test(l) && l !== '메뉴 모두 보기');
-
-        const items: Array<{ name: string; price: string }> = [];
-        let pendingName: string | null = null;
-        const priceRegex = /[\d,.]+\s*원/;
-
-        for (const line of lines) {
-          if (priceRegex.test(line)) {
-            const price = (line.match(priceRegex) || [''])[0].replace(/\s+/g, '');
-            if (pendingName) {
-              items.push({ name: pendingName, price });
-              pendingName = null;
-            }
-          } else {
-            pendingName = line;
-          }
-        }
-        if (opts.includeNoPrice && pendingName) {
-          items.push({ name: pendingName, price: '' });
-          pendingName = null;
-        }
-        results = items.filter(m => m.name && (opts.includeNoPrice ? true : !!m.price));
-      }
-
-      const seen = new Set<string>();
-      const deduped: Array<{ name: string; price: string }> = [];
-      for (const m of results) {
-        const key = `${m.name}|${m.price}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          deduped.push(m);
-        }
-      }
-      // 가격 없는 항목 제외 옵션 처리
-      return opts.includeNoPrice ? deduped : deduped.filter(m => !!m.price);
-    }, { includeNoPrice });
-
-    console.log('Menus found:', menus);
-
-    await browser.close()
+    const menus = $('.list.Restaurant_MenuList > li').map((_, el) => ({
+      name: $(el).find('.Restaurant_Menu').text().trim(),
+      price: $(el).find('.Restaurant_MenuPrice').text().trim(),
+    })).get()
 
     return res.json({ menus, rating })
   } catch (err) {
